@@ -19,6 +19,10 @@ const ddl=[
  'CREATE INDEX IF NOT EXISTS idx_screenings_org_date ON screenings(org_id,created_at)',
  'CREATE INDEX IF NOT EXISTS idx_versions_org_dataset ON dataset_versions(org_id,dataset_id,epoch)'
 ];
+const demoDdl=[
+ 'CREATE TABLE IF NOT EXISTS demo_workspaces (org_id TEXT PRIMARY KEY REFERENCES organizations(id), user_id TEXT NOT NULL REFERENCES users(id), created_at TEXT NOT NULL, screenings INTEGER NOT NULL DEFAULT 0, cases INTEGER NOT NULL DEFAULT 0, notes INTEGER NOT NULL DEFAULT 0, events INTEGER NOT NULL DEFAULT 0)',
+ 'CREATE INDEX IF NOT EXISTS idx_demo_workspaces_created ON demo_workspaces(created_at)'
+];
 const convert=(sql)=>{let i=0;return sql.replace(/\?/g,()=>'$'+(++i));};
 export async function openPlatformDb(options={}){
  const databaseUrl=options.databaseUrl??process.env.DATABASE_URL;
@@ -50,13 +54,15 @@ export async function openPlatformDb(options={}){
    await tx.query('CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)');
    const applied=await tx.query('SELECT version FROM schema_migrations WHERE version=?',[1]);
    if(!applied.length){for(const sql of ddl)await tx.query(sql);await tx.query('INSERT INTO schema_migrations(version,applied_at) VALUES(?,?)',[1,new Date().toISOString()]);}
+   const demoApplied=await tx.query('SELECT version FROM schema_migrations WHERE version=?',[2]);
+   if(!demoApplied.length){for(const sql of demoDdl)await tx.query(sql);await tx.query('INSERT INTO schema_migrations(version,applied_at) VALUES(?,?)',[2,new Date().toISOString()]);}
   });
   else{
    const metadata=await db.query(db.kind==='postgres'?"SELECT to_regclass('schema_migrations') AS name":"SELECT name FROM sqlite_master WHERE type='table' AND name='schema_migrations'");
    if(!metadata[0]?.name)throw Error('Platform database has no migration metadata; run migrate:platform');
   }
   const versions=await db.query('SELECT version FROM schema_migrations ORDER BY version');
-  if(versions.length!==1||versions[0].version!==1)throw Error('Unsupported or missing platform database migration; run migrate:platform');
+  if(versions.length!==2||versions[0].version!==1||versions[1].version!==2)throw Error('Unsupported or missing platform database migration; run migrate:platform');
  }catch(error){await db.close();throw error;}
  return db;
 }

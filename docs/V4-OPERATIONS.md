@@ -13,6 +13,7 @@ This runbook applies to the `feat/listproof-v4-platform` branch. The public V3 s
 | `LISTPROOF_HOST` | V4 server | `0.0.0.0` on a container host. |
 | `PORT` | V4 server | Hosting platform supplies it; local fallback is 4173. |
 | `LISTPROOF_OWNER_EMAIL`, `LISTPROOF_OWNER_PASSWORD` | First startup | Both are required on an empty database. Password length: 12–256 characters. Repeated startups preserve the existing owner and password. |
+| `DEMO_MODE_ENABLED` | V4 staging server | Set to `true` to allow isolated jury demo sessions. Any other value, including unset, disables demo entry and existing demo sessions. |
 | `LISTPROOF_ORG_SLUG`, `LISTPROOF_ORG_NAME` | First startup | Workspace identity. Defaults are `listproof` and `ListProof Workspace`. |
 | `LISTPROOF_SEPOLIA_RPC_URL` | Optional server read | HTTPS Sepolia RPC for read-only Registry observation. |
 | `LISTPROOF_RATE_LIMIT` | Optional server | Integer 1–1000 requests per minute per socket address; default 300. |
@@ -27,6 +28,12 @@ This runbook applies to the `feat/listproof-v4-platform` branch. The public V3 s
 4. After the first healthy start, the owner password may be removed from the Render environment. Existing users, cases, notes and audit history are preserved on every restart. If bootstrap variables remain set, keep the same owner email and workspace slug.
 5. `/api/health` must return HTTP 200 with `productVersion: v4-rc`, `caseStorage: postgres`, and `privateWorkspaceEnabled: true`. The staging root `/` redirects to `/workspace`, which shows the login page to unauthenticated visitors. The V3 browser demo remains at `/demo`. On connection, migration or owner-bootstrap failure the process fails before it can become healthy.
 6. Run `npm.cmd run smoke:staging -- https://STAGING_HOST/`. Optional authenticated smoke uses the three `LISTPROOF_STAGING_*` variables and logs no credential values. Then run the full browser workflow against staging in an authorized account.
+
+## Jury Demo Mode
+
+After deploying this branch to the V4 staging service, set `DEMO_MODE_ENABLED=true` in that service's environment and choose **Manual Deploy → Deploy latest commit**. Open the [jury URL](https://listproof-v4-staging.onrender.com/) in a private browser window and click **Try Live Demo — No Sign Up Required**. Check that screening, case notes and audit history work and that owner data is absent. Keep the V3 service and its environment unchanged. To turn demo entry off, set `DEMO_MODE_ENABLED=false` and manually redeploy V4. Existing demo cookies then receive HTTP 401; owner sessions continue to work.
+
+Each visitor receives a separate PostgreSQL organization and analyst account with no password login. Server-side quotas per visitor are 30 screenings, 15 cases, 30 notes and 100 audit events; batch requests are limited to 20 addresses. Demo entry is limited to 20 new workspaces per minute per server process and 100 per rolling 24 hours in PostgreSQL. API traffic also has per-session and existing server rate limits. Demo data remains in PostgreSQL after the session expires; plan a reviewed retention procedure before long-term use. No dataset import, approval, deployment or wallet operation is available to demo accounts.
 
 ## Backup, restore and rollback
 

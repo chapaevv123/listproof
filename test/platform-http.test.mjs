@@ -21,13 +21,15 @@ test('V4 private HTTP API enforces session, CSRF and case workflow while V1 rema
  await db.query('INSERT INTO memberships(org_id,user_id,role,created_at) VALUES(?,?,?,?)',[otherOrg,otherUser,'owner',createdAt]);
  await db.close();
  const port=await freePort(),base='http://127.0.0.1:'+port;
- const start=()=>spawn(process.execPath,['scripts/server.mjs'],{env:{...process.env,LISTPROOF_DB_PATH:path,LISTPROOF_PORT:String(port),LISTPROOF_HOST:'127.0.0.1'},stdio:'ignore'});
+ const start=()=>spawn(process.execPath,['scripts/server.mjs'],{env:{...process.env,LISTPROOF_DB_PATH:path,LISTPROOF_PORT:String(port),LISTPROOF_HOST:'127.0.0.1',DEMO_MODE_ENABLED:'false'},stdio:'ignore'});
  let child=start();
  try{
   let ready=false;for(let i=0;i<100;i++){try{const r=await fetch(base+'/api/health');if(r.ok){ready=true;break;}}catch{}await new Promise(r=>setTimeout(r,40));}assert.ok(ready,'V4 server started');
   const get=path=>fetch(base+path);
   const post=(path,body,headers={})=>fetch(base+path,{method:'POST',headers:{'content-type':'application/json',...headers},body:JSON.stringify(body)});
   assert.equal((await(await get('/api/health')).json()).productVersion,'v4-rc');
+  assert.equal((await(await get('/api/health')).json()).demoModeEnabled,false);
+  assert.equal((await fetch(base+'/api/v2/demo',{method:'POST',headers:{origin:base}})).status,404);
   const root=await fetch(base+'/',{redirect:'manual'});assert.equal(root.status,302);assert.equal(root.headers.get('location'),'/workspace');
   const rootPage=await get('/');assert.equal(rootPage.url,base+'/workspace');assert.match(await rootPage.text(),/src="\/platform\.js"/);
   const htmlAlias=await fetch(base+'/workspace.html',{redirect:'manual'});assert.equal(htmlAlias.status,302);assert.equal(htmlAlias.headers.get('location'),'/workspace');

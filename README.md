@@ -4,7 +4,13 @@
 
 V4 private workspace release candidate: [architecture, setup, limitations and demo script](docs/V4-RELEASE-CANDIDATE.md). The public V3 deployment on master remains unchanged.
 
-V4 operations: [staging, migrations and backups](docs/V4-OPERATIONS.md) · [CRE feasibility and evidence](docs/CRE-V4-FEASIBILITY.md) · [official source assessment](docs/DATASET-SOURCES-V4.md) · [135-second demo script](docs/V4-DEMO-SCRIPT.md). V4 is not publicly deployed.
+V4 operations: [staging, migrations and backups](docs/V4-OPERATIONS.md) · [CRE feasibility and evidence](docs/CRE-V4-FEASIBILITY.md) · [official source assessment](docs/DATASET-SOURCES-V4.md) · [135-second demo script](docs/V4-DEMO-SCRIPT.md).
+
+## Jury live demo (V4 staging)
+
+Open [ListProof V4 staging](https://listproof-v4-staging.onrender.com/). When the owner enables Jury Demo Mode and deploys this V4 branch, select **Try Live Demo — No Sign Up Required**. The service creates a separate PostgreSQL workspace and a short-lived browser session for each visitor. No wallet, registration, password or gas is needed. Screen a synthetic address such as `0x0000000000000000000000000000000000000006`, inspect its absence proof, save a case, add a note, change status, reverify the audit trail and try batch screening. Dataset provenance, saved CRE simulation evidence and read-only Sepolia Registry observations are available in the navigation. Results concern synthetic datasets and do not establish legal clearance.
+
+Demo workspaces cannot see owner data or another visitor's cases. Dataset import and approval remain owner-only. Each demo workspace is limited to 30 screenings, 15 cases, 30 notes, 100 audit events and 20 addresses per batch. The owner enables this feature by setting `DEMO_MODE_ENABLED=true` on the **V4 staging service only** and selecting Manual Deploy. The default is disabled. See [V4 operations](docs/V4-OPERATIONS.md) for the rollout and rollback steps.
 
 ListProof is a synthetic address-screening demonstration for BLI Legal Tech Hackathon 2, targeting Chainlink's **Best workflow with CRE** bounty. The claim is limited to a particular dataset and epoch. It does **not** establish sanctions compliance, legal clearance, identity, or source completeness.
 
@@ -16,7 +22,7 @@ ListProof is a synthetic address-screening demonstration for BLI Legal Tech Hack
 
 _Captured from the running local V3 application on 2026-10-30. The zero values are genuine empty browser workspace counts._
 
-## Product workflow
+## Product workflow (V3 public demo)
 
 Open **Address screening**, enter a 20-byte EVM address, select a synthetic epoch and choose **Generate & verify proof**. The result identifies the exact commitment and independent local verification. **Save as case** stores the original receipt in this browser profile. In **Cases & audit trail**, add notes, update review status, reverify the saved witness, and download a human-readable report or JSON evidence bundle. **Proof explorer** accepts a downloaded receipt or case bundle and checks its witness against a trusted fixture without trusting the receipt's own verdict. **Datasets**, **On-chain registry** and **Chainlink CRE** separate local fixtures, a fresh read-only Sepolia Registry query, the mined publication transaction, saved Gate calls and official CRE CLI simulation.
 

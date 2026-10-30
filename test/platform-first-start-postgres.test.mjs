@@ -8,7 +8,7 @@ import {openPlatformDb} from '../src/platform-db.mjs';
 import {createPlatformStore} from '../src/platform-store.mjs';
 
 const password='correct horse battery staple';
-const tables=['schema_migrations','organizations','users','memberships','sessions','dataset_versions','import_jobs','screenings','cases','case_notes','case_events','cre_audits'];
+const tables=['schema_migrations','organizations','users','memberships','sessions','dataset_versions','import_jobs','screenings','cases','case_notes','case_events','cre_audits','demo_workspaces'];
 const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 const port=()=>new Promise((resolve,reject)=>{const socket=createServer();socket.on('error',reject);socket.listen(0,'127.0.0.1',()=>{const value=socket.address().port;socket.close(()=>resolve(value));});});
 
@@ -37,7 +37,7 @@ test('empty PostgreSQL production startup migrates, bootstraps, persists data an
    try{
     const found=await db.query("SELECT tablename FROM pg_tables WHERE schemaname=?",[schema]);
     assert.deepEqual(tables.filter(name=>!found.some(row=>row.tablename===name)),[]);
-    assert.deepEqual((await db.query('SELECT version FROM schema_migrations')).map(row=>row.version),[1]);
+    assert.deepEqual((await db.query('SELECT version FROM schema_migrations ORDER BY version')).map(row=>row.version),[1,2]);
     const owners=await db.query("SELECT u.id user_id,o.id org_id FROM users u JOIN memberships m ON m.user_id=u.id JOIN organizations o ON o.id=m.org_id WHERE u.email=? AND o.slug=? AND m.role='owner'",[email,orgSlug]);
     assert.equal(owners.length,1);
     const actor={userId:owners[0].user_id,orgId:owners[0].org_id,role:'owner'};

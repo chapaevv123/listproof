@@ -12,6 +12,7 @@ const temporary=mkdtempSync(join(tmpdir(),'listproof-v4-browser-'));
 const database=join(temporary,'workspace.sqlite');
 const password='local smoke only '+crypto.randomUUID();
 const saveScreenshots=process.env.LISTPROOF_BROWSER_SCREENSHOTS!=='0';
+const demoMode=process.env.LISTPROOF_BROWSER_DEMO==='1';
 let server,browser,ws;
 const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function until(check,label){for(let i=0;i<100;i++){try{const value=await check();if(value)return value;}catch{}await pause(100);}throw Error('Timed out: '+label);}
@@ -19,7 +20,7 @@ try{
  const db=await openPlatformDb({sqlitePath:database});
  await bootstrapOwner(db,{email:'smoke@example.test',password,orgSlug:'smoke-org',orgName:'Smoke workspace'});
  await db.close();
- server=spawn(process.execPath,['scripts/server.mjs'],{env:{...process.env,LISTPROOF_DB_PATH:database,LISTPROOF_PORT:'4184',LISTPROOF_HOST:'127.0.0.1'},stdio:'ignore',windowsHide:true});
+ server=spawn(process.execPath,['scripts/server.mjs'],{env:{...process.env,LISTPROOF_DB_PATH:database,LISTPROOF_PORT:'4184',LISTPROOF_HOST:'127.0.0.1',DEMO_MODE_ENABLED:demoMode?'true':'false'},stdio:'ignore',windowsHide:true});
  await until(async()=>{const response=await fetch(base+'/api/health');return response.ok&&response.json().then(x=>x.privateWorkspaceEnabled);},'V4 server');
  browser=spawn(chrome,['--headless=new','--disable-gpu','--no-first-run','--no-default-browser-check','--remote-allow-origins=*','--remote-debugging-port=9229','--user-data-dir='+join(temporary,'chrome'),base+'/'],{stdio:'ignore',windowsHide:true});
  const target=await until(async()=>{const rows=await(await fetch(debug+'/json')).json();return rows.find(x=>x.type==='page'&&x.url.startsWith(base+'/workspace'));},'Chrome page');
@@ -33,8 +34,17 @@ try{
  assert.equal(await evaluate('return location.pathname'),'/workspace');
  assert.equal(await evaluate("return Boolean(document.querySelector('link[href=\"/platform.css\"]')?.sheet)"),true);
  assert.equal(await evaluate("return document.querySelector('.platform-login a[href=\"/demo\"]')?.textContent.includes('Explore public proofs')"),true);
- await evaluate(`document.querySelector('#login-email').value='smoke@example.test';document.querySelector('#login-org').value='smoke-org';document.querySelector('#login-password').value=${JSON.stringify(password)};document.querySelector('#login-form').requestSubmit();`);
- await until(()=>evaluate("return document.querySelector('.platform-rail')?.textContent.includes('smoke-org')"),'authenticated workspace');
+ if(demoMode){
+  assert.equal(await evaluate("return document.querySelector('#demo-login')?.textContent"),'Try Live Demo — No Sign Up Required');
+  await command('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
+  assert.ok(await evaluate('return document.documentElement.scrollWidth<=innerWidth+1'),'Mobile login overflows');
+  await command('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});
+  await evaluate("document.querySelector('#demo-login').click()");
+ }else{
+  assert.equal(await evaluate("return document.querySelector('#demo-login')"),null);
+  await evaluate(`document.querySelector('#login-email').value='smoke@example.test';document.querySelector('#login-org').value='smoke-org';document.querySelector('#login-password').value=${JSON.stringify(password)};document.querySelector('#login-form').requestSubmit();`);
+ }
+ await until(()=>evaluate("return document.querySelector('.platform-rail')?.textContent.includes('"+(demoMode?'jury-':'smoke-org')+"')"),'authenticated workspace');
  await evaluate("location.hash='#screening'");
  await until(()=>evaluate("return Boolean(document.querySelector('#screen-form'))"),'screen form');
  await evaluate("document.querySelector('#screen-form').requestSubmit()");
@@ -77,7 +87,7 @@ try{
  await pause(200);
  const screenshot=await command('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});
  if(saveScreenshots)writeFileSync(new URL('../docs/assets/v4-workspace-local.png',import.meta.url),Buffer.from(screenshot.data,'base64'));
- console.log(JSON.stringify({rootRedirect:true,login:true,screening:true,caseStatus:true,caseNote:true,reverification:true,evidenceExport:true,proofVerified:true,creEvidence:true,mobile,screenshots:saveScreenshots?['docs/assets/v4-workspace-local.png','docs/assets/v4-workspace-mobile.png','docs/assets/v4-case-workbench-local.png','docs/assets/v4-cre-operations-local.png']:[]}));
+ console.log(JSON.stringify({rootRedirect:true,login:true,demoMode,screening:true,caseStatus:true,caseNote:true,reverification:true,evidenceExport:true,proofVerified:true,creEvidence:true,mobile,screenshots:saveScreenshots?['docs/assets/v4-workspace-local.png','docs/assets/v4-workspace-mobile.png','docs/assets/v4-case-workbench-local.png','docs/assets/v4-cre-operations-local.png']:[]}));
 }finally{
  ws?.close();browser?.kill();server?.kill();
  if(server&&server.exitCode===null)await new Promise(resolve=>server.once('exit',resolve));

@@ -1,0 +1,103 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {randomUUID} from 'node:crypto';
+import {spawn} from 'node:child_process';
+import {createServer} from 'node:net';
+import {Pool} from 'pg';
+import {openPlatformDb} from '../src/platform-db.mjs';
+import {bootstrapOwner} from '../src/platform-auth.mjs';
+import {createPlatformStore,ensureSyntheticVersions} from '../src/platform-store.mjs';
+
+const password='correct horse battery staple';
+const address=n=>'0x'+n.toString(16).padStart(40,'0');
+const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+const freePort=()=>new Promise((resolve,reject)=>{const socket=createServer();socket.on('error',reject);socket.listen(0,'127.0.0.1',()=>{const port=socket.address().port;socket.close(()=>resolve(port));});});
+
+test('PostgreSQL jury demo uses real workflows, isolates visitors and owner, enforces limits and can be disabled',
+ {skip:!process.env.LISTPROOF_TEST_DATABASE_URL,timeout:60000},async()=>{
+  const admin=new Pool({connectionString:process.env.LISTPROOF_TEST_DATABASE_URL,ssl:false});
+  const schema='lp_demo_'+randomUUID().replaceAll('-','');
+  await admin.query(`CREATE SCHEMA "${schema}"`);
+  const scoped=new URL(process.env.LISTPROOF_TEST_DATABASE_URL);scoped.searchParams.set('options',`-c search_path=${schema}`);const databaseUrl=scoped.toString();
+  const port=await freePort(),base=`http://127.0.0.1:${port}`;
+  const start=enabled=>spawn(process.execPath,['scripts/server.mjs'],{env:{...process.env,DATABASE_URL:databaseUrl,LISTPROOF_DB_SSL:'disable',LISTPROOF_REQUIRE_DATABASE:'1',LISTPROOF_PORT:String(port),LISTPROOF_HOST:'127.0.0.1',NODE_ENV:'production',DEMO_MODE_ENABLED:enabled?'true':'false',LISTPROOF_OWNER_EMAIL:'',LISTPROOF_OWNER_PASSWORD:''},stdio:'ignore'});
+  const stop=async child=>{if(child&&child.exitCode===null&&child.signalCode===null)await new Promise(resolve=>{child.once('exit',resolve);child.kill();});};
+  const ready=async()=>{for(let i=0;i<120;i++){try{const response=await fetch(base+'/api/health');if(response.ok)return await response.json();}catch{}await pause(50);}throw Error('Demo test server did not become healthy');};
+  const post=(path,body,headers={})=>fetch(base+path,{method:'POST',headers:{'content-type':'application/json',...headers},body:JSON.stringify(body)});
+  const demo=(headers={})=>fetch(base+'/api/v2/demo',{method:'POST',headers:{origin:`https://127.0.0.1:${port}`,...headers}});
+  let child;
+  try{
+   const db=await openPlatformDb({databaseUrl});
+   const owner=await bootstrapOwner(db,{email:'owner@example.test',password,orgSlug:'owner-org',orgName:'Private owner'});
+   await ensureSyntheticVersions(db);
+   const store=createPlatformStore(db),actor={userId:owner.userId,orgId:owner.orgId,role:'owner'};
+   const ownerScreen=await store.screening(actor,{address:address(6),datasetVersionId:'synthetic-epoch-1'});
+   const ownerCase=await store.createCase(actor,{screeningId:ownerScreen.id});
+   await store.note(actor,ownerCase.id,'Owner private note');
+   await db.query('DROP TABLE demo_workspaces');
+   await db.query('DELETE FROM schema_migrations WHERE version=?',[2]);
+   await db.close();
+   child=start(true);const health=await ready();assert.equal(health.caseStorage,'postgres');assert.equal(health.demoModeEnabled,true);
+   assert.equal((await demo({origin:'https://untrusted.example'})).status,403);
+   assert.equal((await fetch(base+'/api/v2/demo',{method:'POST'})).status,403);
+   assert.equal((await fetch(base+'/api/v2/cases')).status,401);
+   const [first,second]=await Promise.all([demo(),demo()]);assert.equal(first.status,200);assert.equal(second.status,200);
+   const a=await first.json(),b=await second.json();assert.equal(a.user.demo,true);assert.equal(a.user.role,'analyst');assert.notEqual(a.user.orgId,b.user.orgId);
+   const cookieA=first.headers.get('set-cookie').split(';')[0],cookieB=second.headers.get('set-cookie').split(';')[0];
+   assert.match(first.headers.get('set-cookie'),/HttpOnly; SameSite=Strict; Secure/);
+   const authA={cookie:cookieA,'x-csrf-token':a.csrf},authB={cookie:cookieB,'x-csrf-token':b.csrf};
+   const get=(path,cookie)=>fetch(base+path,{headers:{cookie}});
+   assert.equal((await get('/api/v2/cases',cookieA)).status,200);
+   assert.deepEqual(await(await get('/api/v2/cases',cookieA)).json(),[]);
+   const versions=await(await get('/api/v2/datasets',cookieA)).json();assert.equal(versions.length,2);assert.ok(versions.every(x=>x.classification==='synthetic'));
+   assert.equal((await get('/api/v2/cases/'+ownerCase.id,cookieA)).status,404);
+   assert.equal((await post('/api/v2/cases/'+ownerCase.id+'/notes',{body:'intrusion'},authA)).status,404);
+   assert.equal((await post('/api/v2/screenings',{address:address(6),datasetVersionId:'synthetic-epoch-1'},{cookie:cookieA})).status,403);
+   assert.equal((await post('/api/v2/screenings',{address:address(6),datasetVersionId:'synthetic-epoch-1'},{cookie:cookieA,'x-csrf-token':b.csrf})).status,403);
+   assert.equal((await post('/api/v2/login',{email:a.user.email,password,orgSlug:a.user.orgSlug})).status,401);
+   const screening=await post('/api/v2/screenings',{address:address(6),datasetVersionId:'synthetic-epoch-1'},authA);assert.equal(screening.status,201);
+   const screened=await screening.json();assert.equal(screened.result,'not-present');assert.equal(screened.receipt.verified,true);
+   const verified=await post('/api/v2/verify',{receipt:screened.receipt,datasetVersionId:'synthetic-epoch-1'},authA);assert.equal((await verified.json()).verified,true);
+   const batch=await post('/api/v2/batch',{addresses:[address(5),address(7),'invalid'],datasetVersionId:'synthetic-epoch-1'},authA);
+   assert.deepEqual((await batch.json()).results.map(x=>x.status),['listed','not-present','error']);
+   const created=await post('/api/v2/cases',{screeningId:screened.id},authA);assert.equal(created.status,201);const caseId=(await created.json()).id;
+   assert.equal((await post('/api/v2/cases/'+caseId+'/notes',{body:'Evidence reviewed by jury'},authA)).status,200);
+   const status=await post('/api/v2/cases/'+caseId+'/status',{status:'Under Review'},authA);assert.equal((await status.json()).status,'Under Review');
+   const reverify=await post('/api/v2/cases/'+caseId+'/reverify',{},authA);assert.equal((await reverify.json()).auditChainValid,true);
+   const detail=await(await get('/api/v2/cases/'+caseId,cookieA)).json();assert.equal(detail.notes[0].body,'Evidence reviewed by jury');assert.ok(detail.events.length>=4);
+   assert.equal((await get('/api/v2/cases/'+caseId,cookieB)).status,404);
+   assert.equal((await post('/api/v2/cases/'+caseId+'/status',{status:'Closed'},authB)).status,404);
+   assert.equal((await post('/api/v2/datasets',{datasetId:'forbidden',epoch:1,addresses:[address(1)],provenance:'A sufficiently long provenance'},authA)).status,403);
+   assert.equal((await post('/api/v2/datasets/'+randomUUID()+'/approve',{},authA)).status,403);
+   assert.equal((await get('/api/v2/settings',cookieA)).status,404);
+   assert.equal((await fetch(base+'/api/publication/epoch-1')).status,404);
+   assert.equal((await post('/api/v2/cases/'+caseId+'/notes',{body:'x'.repeat(501)},authA)).status,400);
+   assert.equal((await post('/api/v2/batch',{addresses:Array(21).fill(address(6)),datasetVersionId:'synthetic-epoch-1'},authA)).status,429);
+   assert.equal((await fetch(base+'/api/v1/cre/v4')).status,200);
+   assert.equal((await fetch(base+'/api/sepolia')).status,200);
+   const ownerLogin=await post('/api/v2/login',{email:'owner@example.test',password,orgSlug:'owner-org'});assert.equal(ownerLogin.status,200);
+   const ownerCookie=ownerLogin.headers.get('set-cookie').split(';')[0];assert.equal((await get('/api/v2/cases/'+caseId,ownerCookie)).status,404);
+   const ownerDetail=await(await get('/api/v2/cases/'+ownerCase.id,ownerCookie)).json();assert.equal(ownerDetail.notes[0].body,'Owner private note');
+   const reused=await demo({cookie:cookieA});assert.equal(reused.status,200);assert.equal((await reused.json()).user.orgId,a.user.orgId);
+   const quotaDb=await openPlatformDb({databaseUrl,migrate:false});
+   try{
+    await quotaDb.query('UPDATE demo_workspaces SET screenings=? WHERE org_id=?',[29,a.user.orgId]);
+    const attempts=await Promise.all([post('/api/v2/screenings',{address:address(8),datasetVersionId:'synthetic-epoch-1'},authA),post('/api/v2/screenings',{address:address(9),datasetVersionId:'synthetic-epoch-1'},authA)]);
+    assert.deepEqual(attempts.map(x=>x.status).sort(),[201,429]);
+    assert.equal(Number((await quotaDb.query('SELECT screenings FROM demo_workspaces WHERE org_id=?',[a.user.orgId]))[0].screenings),30);
+    await quotaDb.query('UPDATE demo_workspaces SET notes=? WHERE org_id=?',[30,a.user.orgId]);
+    assert.equal((await post('/api/v2/cases/'+caseId+'/notes',{body:'Over quota'},authA)).status,429);
+    assert.equal((await quotaDb.query('SELECT body FROM case_notes WHERE case_id=?',[ownerCase.id]))[0].body,'Owner private note');
+   }finally{await quotaDb.close();}
+   for(let i=0;i<18;i++)assert.equal((await demo()).status,200);
+   assert.equal((await demo()).status,429);
+   await stop(child);child=start(false);assert.equal((await ready()).demoModeEnabled,false);
+   assert.equal((await demo()).status,404);
+   assert.equal((await get('/api/v2/cases',cookieA)).status,401);
+   assert.equal((await post('/api/v2/login',{email:'owner@example.test',password,orgSlug:'owner-org'})).status,200);
+  }finally{
+   await stop(child);
+   await admin.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
+   await admin.end();
+  }
+ });

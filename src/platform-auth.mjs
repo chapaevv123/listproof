@@ -56,18 +56,34 @@ export async function login(db,{email,password,orgSlug,remoteAddress}){
  attempts.delete(key);
  const token=random(),csrf=sha('csrf:'+token),expiresAt=new Date(now+8*60*60*1000).toISOString();
  await db.query('INSERT INTO sessions(token_hash,user_id,org_id,csrf_hash,expires_at,created_at) VALUES(?,?,?,?,?,?)',[sha(token),user.user_id,user.org_id,sha(csrf),expiresAt,new Date(now).toISOString()]);
- return {token,csrf,expiresAt,user:{id:user.user_id,email:String(email).toLowerCase(),orgId:user.org_id,orgSlug:user.slug,role:user.role}};
+ return {token,csrf,expiresAt,user:{id:user.user_id,email:String(email).toLowerCase(),orgId:user.org_id,orgSlug:user.slug,role:user.role,demo:false}};
 }
-export function cookieFor(token,{secure=false,clear=false}={}){
- return 'lp_session='+(clear?'':token)+'; Path=/api/v2; HttpOnly; SameSite=Strict'+(secure?'; Secure':'')+'; Max-Age='+(clear?'0':'28800');
+export async function createDemoSession(db){
+ const identity=randomUUID(),orgId=randomUUID(),userId=randomUUID(),orgSlug='jury-'+identity.slice(0,12),email=`jury-${identity}@demo.invalid`;
+ const token=random(),csrf=sha('csrf:'+token),createdAt=new Date().toISOString(),expiresAt=new Date(Date.now()+2*60*60*1000).toISOString();
+ return db.transaction(async tx=>{
+  if(tx.kind==='postgres')await tx.query('SELECT pg_advisory_xact_lock(1279877436)');
+  const since=new Date(Date.now()-24*60*60*1000).toISOString();
+  const count=await tx.query('SELECT COUNT(*) AS total FROM demo_workspaces WHERE created_at>=?',[since]);
+  if(Number(count[0].total)>=100)throw Object.assign(Error('Demo capacity reached; try again later'),{status:429});
+  await tx.query('INSERT INTO organizations(id,slug,name,created_at) VALUES(?,?,?,?)',[orgId,orgSlug,'Jury demo workspace',createdAt]);
+  await tx.query('INSERT INTO users(id,email,password_hash,created_at) VALUES(?,?,?,?)',[userId,email,'demo-password-login-disabled',createdAt]);
+  await tx.query('INSERT INTO memberships(org_id,user_id,role,created_at) VALUES(?,?,?,?)',[orgId,userId,'analyst',createdAt]);
+  await tx.query('INSERT INTO demo_workspaces(org_id,user_id,created_at) VALUES(?,?,?)',[orgId,userId,createdAt]);
+  await tx.query('INSERT INTO sessions(token_hash,user_id,org_id,csrf_hash,expires_at,created_at) VALUES(?,?,?,?,?,?)',[sha(token),userId,orgId,sha(csrf),expiresAt,createdAt]);
+  return {token,csrf,expiresAt,user:{id:userId,email,orgId,orgSlug,role:'analyst',demo:true}};
+ });
+}
+export function cookieFor(token,{secure=false,clear=false,maxAge=28800}={}){
+ return 'lp_session='+(clear?'':token)+'; Path=/api/v2; HttpOnly; SameSite=Strict'+(secure?'; Secure':'')+'; Max-Age='+(clear?'0':maxAge);
 }
 export async function sessionFromRequest(db,req){
  const cookie=String(req.headers.cookie||'').split(';').map(x=>x.trim()).find(x=>x.startsWith('lp_session='));
  if(!cookie)return null;
  const token=cookie.slice('lp_session='.length);if(!/^[A-Za-z0-9_-]{40,50}$/.test(token))return null;
- const rows=await db.query('SELECT s.token_hash,s.csrf_hash,s.expires_at,u.id user_id,u.email,o.id org_id,o.slug,m.role FROM sessions s JOIN users u ON u.id=s.user_id JOIN organizations o ON o.id=s.org_id JOIN memberships m ON m.user_id=u.id AND m.org_id=o.id WHERE s.token_hash=? AND u.disabled_at IS NULL',[sha(token)]);
+ const rows=await db.query('SELECT s.token_hash,s.csrf_hash,s.expires_at,u.id user_id,u.email,o.id org_id,o.slug,m.role,d.org_id demo_org_id FROM sessions s JOIN users u ON u.id=s.user_id JOIN organizations o ON o.id=s.org_id JOIN memberships m ON m.user_id=u.id AND m.org_id=o.id LEFT JOIN demo_workspaces d ON d.org_id=o.id AND d.user_id=u.id WHERE s.token_hash=? AND u.disabled_at IS NULL',[sha(token)]);
  const row=rows[0];if(!row||row.expires_at<=new Date().toISOString())return null;
- return {tokenHash:row.token_hash,csrfHash:row.csrf_hash,csrf:sha('csrf:'+token),userId:row.user_id,email:row.email,orgId:row.org_id,orgSlug:row.slug,role:row.role};
+ return {tokenHash:row.token_hash,csrfHash:row.csrf_hash,csrf:sha('csrf:'+token),expiresAt:row.expires_at,userId:row.user_id,email:row.email,orgId:row.org_id,orgSlug:row.slug,role:row.role,demo:Boolean(row.demo_org_id)};
 }
 export function validCsrf(session,header){
  if(typeof header!=='string'||!/^[0-9a-f]{64}$/.test(header))return false;

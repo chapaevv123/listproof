@@ -75,8 +75,8 @@ const server=createServer(async(req,res)=>{
  if(req.method==='GET'&&url.pathname==='/platform.css')return send(res,200,readFileSync(new URL('../web/platform.css',import.meta.url),'utf8'),'text/css; charset=utf-8');
  if(req.method==='GET'&&url.pathname==='/platform.js')return send(res,200,readFileSync(new URL('../web/platform.js',import.meta.url),'utf8'),'text/javascript; charset=utf-8');
  if(req.method==='GET'&&url.pathname==='/api/health'){
-  if(platform)try{const rows=await platform.db.query('SELECT version FROM schema_migrations ORDER BY version DESC LIMIT 1');if(rows[0]?.version!==1)throw Error('Migration unavailable');}catch{return send(res,503,{ok:false,code:'DATABASE_UNAVAILABLE',productVersion:'v4-rc'});}
-  return send(res,200,{ok:true,productVersion:platform?'v4-rc':'v3',mode:'synthetic-read-only',caseStorage:platform?platform.db.kind:'browser-local',privateWorkspaceEnabled:Boolean(platform),localProofOnly:true,sepoliaContractsPublished:true,creLocalEvidenceAvailable:existsSync(new URL('../evidence/cre-local-simulation.txt',import.meta.url))});
+  if(platform)try{const rows=await platform.db.query('SELECT version FROM schema_migrations ORDER BY version DESC LIMIT 1');if(rows[0]?.version!==2)throw Error('Migration unavailable');}catch{return send(res,503,{ok:false,code:'DATABASE_UNAVAILABLE',productVersion:'v4-rc'});}
+  return send(res,200,{ok:true,productVersion:platform?'v4-rc':'v3',mode:'synthetic-read-only',caseStorage:platform?platform.db.kind:'browser-local',privateWorkspaceEnabled:Boolean(platform),demoModeEnabled:Boolean(platform)&&process.env.DEMO_MODE_ENABLED==='true',localProofOnly:true,sepoliaContractsPublished:true,creLocalEvidenceAvailable:existsSync(new URL('../evidence/cre-local-simulation.txt',import.meta.url))});
  }
  if(req.method==='GET'&&url.pathname==='/evidence/cre-local-simulation.txt')return send(res,200,readCRELog('cre-local-simulation.txt'),'text/plain; charset=utf-8');
  if(req.method==='GET'&&url.pathname==='/evidence/cre-onchain-settings.txt')return send(res,200,readCRELog('cre-onchain-settings.txt'),'text/plain; charset=utf-8');

@@ -8,6 +8,13 @@ const now=()=>new Date().toISOString();
 const fail=(message,status=400)=>{throw Object.assign(Error(message),{status});};
 const parse=value=>value?JSON.parse(value):null;
 const statuses=['Open','Under Review','Evidence Verified','Evidence Rejected','Closed'];
+const demoLimits={screenings:30,cases:15,notes:30,events:100};
+async function reserveDemo(tx,actor,field){
+ if(!actor.demo)return;
+ const row=(await tx.query('SELECT '+field+' AS used FROM demo_workspaces WHERE org_id=?'+(tx.kind==='postgres'?' FOR UPDATE':''),[actor.orgId]))[0];
+ if(!row||Number(row.used)>=demoLimits[field])fail('Demo workspace limit reached',429);
+ await tx.query('UPDATE demo_workspaces SET '+field+'='+field+'+1 WHERE org_id=?',[actor.orgId]);
+}
 const fixed=n=>JSON.parse(readFileSync(new URL('../data/epoch-'+n+'.json',import.meta.url),'utf8'));
 const expected=tree=>({...tree.context,root:tree.root,count:tree.addresses.length});
 const safeLeaf=(context,address)=>{try{return leaf(context,address);}catch{return null;}};
@@ -81,7 +88,10 @@ export function createPlatformStore(db){
    }
    const id=randomUUID(),createdAt=now();
    try{
-    await db.query('INSERT INTO screenings(id,org_id,actor_id,dataset_version_id,address,result,receipt_json,initial_verification_json,latest_verification_json,created_at,idempotency_key) VALUES(?,?,?,?,?,?,?,?,?,?,?)',[id,actor.orgId,actor.userId,version.id,target,result,receipt?JSON.stringify(receipt):null,verification?JSON.stringify(verification):null,verification?JSON.stringify(verification):null,createdAt,idempotencyKey||null]);
+    await db.transaction(async tx=>{
+     await reserveDemo(tx,actor,'screenings');
+     await tx.query('INSERT INTO screenings(id,org_id,actor_id,dataset_version_id,address,result,receipt_json,initial_verification_json,latest_verification_json,created_at,idempotency_key) VALUES(?,?,?,?,?,?,?,?,?,?,?)',[id,actor.orgId,actor.userId,version.id,target,result,receipt?JSON.stringify(receipt):null,verification?JSON.stringify(verification):null,verification?JSON.stringify(verification):null,createdAt,idempotencyKey||null]);
+    });
    }catch(error){
     if(!idempotencyKey)throw error;
     const existing=(await db.query('SELECT * FROM screenings WHERE org_id=? AND idempotency_key=?',[actor.orgId,idempotencyKey]))[0];
@@ -93,6 +103,7 @@ export function createPlatformStore(db){
   async batch(actor,{addresses,datasetVersionId}){
    if(actor.role==='auditor')fail('Read-only role',403);
    if(!Array.isArray(addresses)||addresses.length<1||addresses.length>100)fail('Batch must contain 1–100 addresses');
+   if(actor.demo&&addresses.length>20)fail('Demo batch limit is 20 addresses',429);
    const unique=new Set(),results=[];
    for(const [index,address] of addresses.entries()){
     try{const target=normalize(address);if(unique.has(target)){results.push({index,address:target,status:'duplicate'});continue;}unique.add(target);const screening=await this.screening(actor,{address:target,datasetVersionId});results.push({index,address:target,status:screening.result,screening});}
@@ -109,6 +120,7 @@ export function createPlatformStore(db){
     const existing=(await tx.query('SELECT id FROM cases WHERE screening_id=? AND org_id=?',[screeningId,actor.orgId]))[0];
     if(existing)return this.case(actor,existing.id);
     if(assignedTo){const member=(await tx.query('SELECT user_id FROM memberships WHERE user_id=? AND org_id=?',[assignedTo,actor.orgId]))[0];if(!member)fail('Reviewer not in workspace',400);}
+    await reserveDemo(tx,actor,'cases');await reserveDemo(tx,actor,'events');
     const id=randomUUID(),at=now();
     await tx.query('INSERT INTO cases(id,org_id,screening_id,assigned_to,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?)',[id,actor.orgId,screeningId,assignedTo||null,'Open',at,at]);
     await appendEvent(tx,{caseId:id,actorId:actor.userId,action:'CASE_CREATED',newState:'Open',evidenceRef:screeningId});
@@ -136,6 +148,7 @@ export function createPlatformStore(db){
     const row=await getCaseRow(tx,actor,id);
     if(next==='Evidence Verified'){const version=await getVersion(tx,actor,row.dataset_version_id);if(!verifiedReceipt(parse(row.receipt_json),version))fail('Proof does not verify against stored commitment',409);}
     if(row.status===next)return;
+    await reserveDemo(tx,actor,'events');
     await tx.query('UPDATE cases SET status=?,updated_at=? WHERE id=? AND org_id=?',[next,now(),id,actor.orgId]);
     await appendEvent(tx,{caseId:id,actorId:actor.userId,action:'STATUS_CHANGED',previousState:row.status,newState:next,evidenceRef:row.screening_id});
    });
@@ -143,9 +156,10 @@ export function createPlatformStore(db){
   },
   async note(actor,id,body){
    if(actor.role==='auditor')fail('Read-only role',403);
-   if(typeof body!=='string'||!body.trim()||body.length>2000)fail('Note must be 1–2000 characters');
+   if(typeof body!=='string'||!body.trim()||body.length>(actor.demo?500:2000))fail('Note exceeds workspace limit');
    await db.transaction(async tx=>{
     await getCaseRow(tx,actor,id);
+    await reserveDemo(tx,actor,'notes');await reserveDemo(tx,actor,'events');
     const noteId=randomUUID(),at=now();
     await tx.query('INSERT INTO case_notes(id,case_id,actor_id,body,created_at) VALUES(?,?,?,?,?)',[noteId,id,actor.userId,body.trim(),at]);
     await appendEvent(tx,{caseId:id,actorId:actor.userId,action:'NOTE_ADDED',newState:noteId,evidenceRef:noteId});
@@ -156,6 +170,7 @@ export function createPlatformStore(db){
    if(actor.role==='auditor')fail('Read-only role',403);
    await db.transaction(async tx=>{
     const row=await getCaseRow(tx,actor,id),version=await getVersion(tx,actor,row.dataset_version_id);
+    await reserveDemo(tx,actor,'events');
     const verified=Boolean(verifiedReceipt(parse(row.receipt_json),version));
     const result={verified,epoch:version.epoch,root:version.root,at:now(),method:'independent-local-verifier'};
     await tx.query('UPDATE screenings SET latest_verification_json=? WHERE id=? AND org_id=?',[JSON.stringify(result),row.screening_id,actor.orgId]);

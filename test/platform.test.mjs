@@ -25,7 +25,7 @@ test('migration, durable SQLite restart, foreign keys and owner bootstrap guard'
   db=await openPlatformDb({sqlitePath:path});
   const reopened=await createPlatformStore(db).case(f.actor,saved.id);
   assert.equal(reopened.screening.address,a(6));assert.equal(reopened.auditChainValid,true);
-  assert.equal((await db.query('SELECT version FROM schema_migrations'))[0].version,1);
+  assert.deepEqual((await db.query('SELECT version FROM schema_migrations ORDER BY version')).map(x=>x.version),[1,2]);
   await assert.rejects(bootstrapOwner(db,{email:'other@example.test',password,orgSlug:'other-org',orgName:'Other'}),/already exists/);
   await assert.rejects(db.query('INSERT INTO cases(id,org_id,screening_id,status,created_at,updated_at) VALUES(?,?,?,?,?,?)',['bad','missing','missing','Open','x','x']));
  }finally{if(db)await db.close();for(const suffix of ['','-wal','-shm'])if(existsSync(path+suffix))unlinkSync(path+suffix);}
