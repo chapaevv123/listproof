@@ -22,6 +22,8 @@ async function refresh() {
   if (!state) throw new Error('Dataset epoch unavailable');
   document.querySelector('#epochValue').textContent = `Epoch ${state.epoch}`;
   document.querySelector('#root').textContent = state.root;
+  const dataset = await jsonRequest(`/dataset/${state.epoch}`);
+  document.querySelector('#datasetAddresses').textContent = dataset.addresses.map((item,index) => `${index}  ${item}`).join('\n');
 }
 async function run(mode = 'manual') {
   if (mode === 'listed') address.value = '0x0000000000000000000000000000000000000005';
@@ -71,7 +73,7 @@ async function showSepoliaEvidence() {
       line(`Gate eth_call checks at Sepolia block ${evidence.proofCheck.blockNumber} (no transaction):`);
       for(const result of evidence.proofCheck.results)line(`${result.passed?'PASS':'FAIL'} · ${result.name} · ${result.expected}`);
     }else line('Gate eth_call proof checks: pending; no on-chain proof result claimed.');
-    line('CRE: official local simulation only; no receiver update on-chain.');
+    line('CRE: official local simulation read the Sepolia Registry; no receiver update on-chain.');
   }catch(error){target.textContent=`Sepolia evidence unavailable: ${error.message}`;}
 }
 showSepoliaEvidence();

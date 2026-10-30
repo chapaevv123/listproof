@@ -19,7 +19,7 @@ export function verifyMembership(c,root,count,p){
 export function verifyNonMembership(proof,expected){
  try {
   const {context:c,root,count,target,left,right}=proof;
-  if(c.scheme!==SCHEME||c.chainId!==expected.chainId||c.datasetId!==expected.datasetId||c.datasetKey!==datasetKey(c.datasetId)||c.epoch!==expected.epoch||root!==expected.root||!validHash(root)||!Number.isSafeInteger(count)||count<1||normalize(target)!==target)return false;
+  if(c.scheme!==SCHEME||c.chainId!==expected.chainId||c.datasetId!==expected.datasetId||c.datasetKey!==datasetKey(c.datasetId)||c.epoch!==expected.epoch||root!==expected.root||!validHash(root)||!Number.isSafeInteger(count)||count<1||(expected.count!==undefined&&count!==expected.count)||normalize(target)!==target)return false;
   if(!left&&!right)return false;
   if(left&&(!verifyMembership(c,root,count,left)||!(normalize(left.address)<target)))return false;
   if(right&&(!verifyMembership(c,root,count,right)||!(target<normalize(right.address))))return false;

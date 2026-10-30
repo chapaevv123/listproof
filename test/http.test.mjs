@@ -11,6 +11,7 @@ test('HTTP adapter and complete proof scenarios',async()=>{
   const health=await(await fetch(base+'/api/health')).json();assert.equal(health.localProofOnly,true);assert.equal(health.sepoliaContractsPublished,true);
   const html=await(await fetch(base+'/')).text();assert.match(html,/<script src="\/app\.js"><\/script>/);
   const app=await fetch(base+'/app.js');assert.equal(app.status,200);assert.match(await app.text(),/independentVerification/);
+  const creAudit=await fetch(base+'/evidence/cre-onchain-settings.txt');assert.equal(creAudit.status,200);assert.match(await creAudit.text(),/read-only registry check; no transaction sent/);
   const dataset=await(await fetch(base+'/dataset/1')).json();assert.equal(dataset.schema,'listproof-addresses-v1');
   const sepolia=await(await fetch(base+'/api/sepolia')).json();
   assert.equal(sepolia.chainId,11155111);

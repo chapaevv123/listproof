@@ -69,8 +69,8 @@
     ]
   },
   "cre": {
-    "status": "local-simulation-only",
-    "logPath": "/evidence/cre-local-simulation.txt",
+    "status": "official-local-simulation-with-sepolia-read",
+    "logPath": "/evidence/cre-onchain-settings.txt",
     "onchainReceiverUpdate": false
   },
   "limitation": "Synthetic dataset non-membership only; not sanctions compliance or legal clearance"

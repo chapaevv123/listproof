@@ -6,7 +6,7 @@ import {verifyMembership,verifyNonMembership} from '../src/verify.mjs';
 const data=JSON.parse(readFileSync(new URL('../data/epoch-1.json',import.meta.url)));
 const data2=JSON.parse(readFileSync(new URL('../data/epoch-2.json',import.meta.url)));
 const addr=n=>'0x'+n.toString(16).padStart(40,'0');
-const t=build(data), expected={...t.context,root:t.root};
+const t=build(data), expected={...t.context,root:t.root,count:t.addresses.length};
 test('normalization and duplicate rejection',()=>{
  assert.equal(normalize('0x'+'AB'.repeat(20)),'0x'+'ab'.repeat(20));
  assert.throws(()=>normalize('0x12'));
@@ -29,6 +29,7 @@ test('forgery, stale epoch, root and neighbor substitution',()=>{
  assert.equal(verifyNonMembership(p,{...expected,epoch:2}),false);
  assert.equal(verifyNonMembership(p,{...expected,datasetId:'other'}),false);
  assert.equal(verifyNonMembership(p,{...expected,chainId:'1'}),false);
+ assert.equal(verifyNonMembership({...p,count:p.count+1},expected),false);
  const t2=build(data2); assert.equal(verifyNonMembership(p,{...t2.context,root:t2.root}),false);
 });
 test('randomized sorted sets and absent targets',()=>{

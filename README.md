@@ -1,120 +1,149 @@
 # ListProof
 
-ListProof is a hackathon prototype for proving that an EVM address is absent from **one committed, versioned address set**. It is a technical demonstration, not sanctions compliance, legal approval, KYC, or identity verification. The default dataset contains only synthetic addresses.
+> **Cryptographic evidence that an EVM address is absent from one committed, versioned set.**
 
-**Current state (2026-10-30):** Registry [`0x1607…4Efa`](https://sepolia.etherscan.io/address/0x1607Af4E1DA1C06362871443d2e95C367B984Efa) and Gate [`0xf88F…A9A3`](https://sepolia.etherscan.io/address/0xf88F9870fe6e135d5bD56852750c8af8a466A9A3) are deployed on Sepolia. Synthetic epoch 1 was published in [transaction `0x824c…478d`](https://sepolia.etherscan.io/tx/0x824c1f5a44aff746f8737b9e97d6e92d5e42a23a69d4627b6a8fe7de8e7d478d); local receipt evidence verifies calldata, event, runtime bytecode and contract state. The official CRE local simulation prepared a report but did **not** read the Registry or send a transaction. Current Gate `eth_call` proof checks and CRE Registry-read simulation await runs from an unrestricted PowerShell. No live DON workflow, public GitHub repository or public demo is verified.
+ListProof is a synthetic address-screening demonstration for BLI Legal Tech Hackathon 2, targeting Chainlink's **Best workflow with CRE** bounty. The claim is limited to a particular dataset and epoch. It does **not** establish sanctions compliance, legal clearance, identity, or source completeness.
 
-## Quick start on Windows PowerShell
+**Explore:** [Registry](https://sepolia.etherscan.io/address/0x1607Af4E1DA1C06362871443d2e95C367B984Efa) · [Gate](https://sepolia.etherscan.io/address/0xf88F9870fe6e135d5bD56852750c8af8a466A9A3) · [epoch-1 transaction](https://sepolia.etherscan.io/tx/0x824c1f5a44aff746f8737b9e97d6e92d5e42a23a69d4627b6a8fe7de8e7d478d) · [evidence](docs/EVIDENCE.md) · [submission draft](docs/SUBMISSION.md).
 
-```powershell
-cd C:\Users\Win10_Game_OS\Pulse\projects\listproof
-node --version  # Node 20+
-npm.cmd run check
-npm.cmd run demo
-npm.cmd run serve
-# In another PowerShell window:
-npm.cmd run preflight
-npm.cmd run capture
-```
+**Demo:** run `npm.cmd run serve` and open `http://127.0.0.1:4173`. No hosted demo URL has been verified. A judge needs no wallet to use the local proof demo.
 
-Open `http://127.0.0.1:4173`. The UI has four local proof scenarios and a separate Sepolia evidence panel. Its proof buttons do not make a blockchain transaction or call the Gate.
+![Genuine local ListProof demo showing the synthetic dataset and saved Sepolia evidence](docs/assets/demo-desktop.png)
 
-## Architecture
+_Captured from the running local application on 2026-10-30, before clicking a proof scenario. The proof scenarios are reproducible using the commands below._
+
+## Problem and solution
+
+A plain “not on the list” API response does not identify the dataset, version or verifiable reason. ListProof commits a sorted synthetic list and authenticates the immediate neighbors of a queried address. A verifier checks their Merkle paths, ordering, adjacency, epoch and root. Updating the set creates a new epoch.
 
 ```mermaid
 flowchart LR
-  A[Synthetic versioned JSON] --> B[Canonical adapter and SHA-256 content hash]
-  B --> C[Sorted address Merkle tree]
-  C --> D[Neighbor membership proofs]
-  D --> E[Independent verifier]
-  D --> F[ListProofGate Solidity]
-  B --> G[CRE SDK workflow]
-  G --> H[Signed CRE root report]
-  H -. future authorized write .-> I[CRE receiver: forwarder and workflow ID checks]
-  I -. future publisher transfer .-> J[Versioned root registry]
-  P[Pulse publisher wallet] -->|epoch 1 transaction| J
-  J --> F
+  D[Versioned synthetic JSON] --> C[Canonical addresses and SHA-256 content hash]
+  C --> M[Sorted Merkle root]
+  M --> R[Sepolia Registry: epoch, root, count, hash]
+  M --> P[Neighbor membership witnesses]
+  P --> V[Independent local verifier]
+  P --> G[Sepolia Gate]
+  R --> G
+  D --> H[Chainlink CRE HTTP validation]
+  R --> A[CRE finalized Registry read in simulation]
+  H --> A
+  A --> S[Prepared signed audit report]
 ```
 
-The CRE workflow uses a cron trigger, HTTP capability with identical aggregation, pinned content hash, schema/version/root checks, and a Sepolia block read. The [saved official local simulation](evidence/cre-local-simulation.txt) completed these operations and prepared a report. Its config had no Registry or receiver, so it made no contract read or write. A new `audit-current` target is configured to read the deployed Registry's epoch/root/dataset ID/content hash/count at a finalized block and prepare a read-only report; its official simulation is **not yet captured**. The receiver contract enforces forwarder and workflow ID, but no receiver has been deployed and no CRE on-chain write is claimed.
+The [Registry](contracts/ListProof.sol) accepts sequential updates from its publisher. The Gate is a test-only ledger that checks proofs against the Registry's **current** epoch, root and count. Its transfer also checks a sender nonce and one-use sender/recipient/epoch/root evidence key. The [CRE workflow](cre/listproof/main.ts) has a cron trigger. Its saved audit simulation fetches the dataset, validates it, reads the real Sepolia Registry and prepares a report. **No live DON execution or CRE write transaction is claimed.**
 
-## Proof format and verification
+## Exact proof mathematics
 
-- Normalize an EVM address as exactly `0x` plus 40 hexadecimal characters, lowercased. Mixed case is accepted as input; EIP-55 checksum is not enforced.
-- `datasetKey = SHA256(UTF8(datasetId))`.
-- `leaf = SHA256(0x00 || uint256(chainId) || datasetKey || uint256(epoch) || address20)`.
-- `parent = SHA256(0x01 || left32 || right32)`. The address list is lexicographically sorted. At odd levels, the final node is promoted unchanged.
-- A membership witness contains address, zero-based index and ordered siblings. Verification recomputes expected sibling positions from index and committed leaf count. Extra, absent, malformed or swapped siblings fail.
-- A non-membership witness contains both adjacent members when in the interior, or the sole first/last member at a boundary. It verifies their membership, address ordering, and adjacency. Empty sets are rejected.
-- The verifier checks chain ID, dataset ID and its key, scheme, epoch, root and count against a trusted commitment. The Solidity gate reads the current root, count and epoch from its registry and uses `block.chainid`.
+The implementation is [src/core.mjs](src/core.mjs), [src/verify.mjs](src/verify.mjs) and [contracts/ListProof.sol](contracts/ListProof.sol). Addresses must be `0x` plus exactly 40 hex digits, then are lowercased and sorted by their 20-byte hexadecimal value. Duplicate and empty sets fail. Mixed case input is accepted; EIP-55 checksums are not enforced.
 
-The proof generator is not part of the trust boundary: [src/verify.mjs](src/verify.mjs) independently parses and hashes the witness. The verifier still relies on SHA-256 collision resistance, the trusted commitment, a correct dataset publisher, and accurate source data. A publisher could omit a listed address; the proof cannot detect that. Reorgs, revocations, dataset freshness, identity linkage, and cross-chain portability are outside this MVP.
+Let $H$ be SHA-256, $\|$ byte concatenation, $U_{256}$ a 32-byte big-endian integer, and $A$ the 20 address bytes. For chain $c$, epoch $e$, and dataset key $K=H(\mathrm{UTF8}(\text{datasetId}))$:
 
-## Data and provenance
+$$L(A)=H(\texttt{0x00}\|U_{256}(c)\|K\|U_{256}(e)\|A)$$
 
-`data/epoch-1.json` and `data/epoch-2.json` are pinned synthetic fixtures. The adapter serves minified JSON; SHA-256 content hashes are pinned in the CRE config. `data/invalid-schema.json` is a negative-test fixture. The UI returns a downloadable local receipt containing the commitment, proof, content hash and independent verification result; it is **not a blockchain receipt or signature**. No OFAC record is represented as an EVM wallet. A future real dataset requires explicit license, source URL, acquisition timestamp, address extraction policy, review, and versioning. A non-membership proof says nothing about addresses outside the selected dataset.
+$$P(X,Y)=H(\texttt{0x01}\|X\|Y)$$
 
-Download a receipt from the UI, then verify it without the server using a root and epoch obtained from a trusted commitment:
+Prefixes separate leaves and internal nodes. Adjacent nodes are hashed **in order**; an unpaired final node is promoted unchanged. A membership witness carries an address, zero-based index and bottom-up siblings. The verifier derives sibling positions from index and leaf count, rejecting extra or absent siblings.
+
+An interior absence witness authenticates adjacent leaves $a_i<t<a_{i+1}$ and verifies both paths and index adjacency. A lower-boundary witness checks $t<a_0$ and index 0; an upper-boundary witness checks $a_{n-1}<t$ and index $n-1$. Strict inequalities reject listed addresses. The trusted commitment binds chain ID, dataset ID/key, scheme, epoch, root and count. Solidity uses `block.chainid` and current Registry state. The local proof button uses fixture state and makes **no RPC call**.
+
+**Worked example:** epoch 1 contains synthetic addresses ending `...02`, `...05`, `...09`. Query `...06` has authenticated neighbors `...05` (index 1) and `...09` (index 2), so `05 < 06 < 09` proves absence from this three-address set. Its root is `0xd5a80d20b41a1049e2a75edbc04761063113ea3002b8f575c4993284b8ab5888`. Query `...05` is listed. Epoch 2 adds `...07`, producing `0xd85061ea6396f625770449c26ddd3d76a429bfe475f2ad7fb046e25ce529fc31`; an epoch-1 proof fails against epoch 2.
+
+## Chainlink CRE
+
+```mermaid
+sequenceDiagram
+  participant C as CRE cron
+  participant H as HTTP capability
+  participant W as ListProof workflow
+  participant R as Sepolia Registry
+  C->>W: Trigger simulation
+  W->>H: Fetch pinned dataset
+  H-->>W: JSON bytes
+  W->>W: Check SHA-256, schema, epoch, Merkle root
+  W->>R: Read finalized epoch, root, ID, hash, count
+  R-->>W: Published epoch-1 state
+  W->>W: Reject inconsistency
+  W-->>C: Prepared signed audit report; no transaction
+```
+
+The [audit config](cre/listproof/config.onchain.json) targets the deployed Registry. [Official CLI output](evidence/cre-onchain-settings.txt) records a matching epoch-1 read of root, content hash and count, followed by `signed audit report prepared; read-only registry check; no transaction sent`. The [stale on-chain case](evidence/cre-onchain-stale-settings.txt) rejects an epoch mismatch. Other saved negative logs reject bad content hash, bad root, stale config, invalid schema and unavailable dataset. These are **official local CRE simulations**, with real reads where configured. The [older local simulation](evidence/cre-local-simulation.txt) had no Registry configured. A receiver exists in source but has not been deployed.
+
+A live `publish-next` path needs approved DON access, a public byte-identical dataset URL, verified forwarder and workflow ID, a deployed receiver and an owner-approved publisher transfer. See the [CRE runbook](docs/CRE-RUNBOOK.md) and [Chainlink's simulation/deployment distinction](https://docs.chain.link/cre/overview).
+
+## Evidence and tests
+
+| Class | Verified fact | Evidence |
+|---|---|---|
+| **ONCHAIN_TRANSACTION** | Registry and Gate deployed; epoch 1 published in block 12026768 | [publication transaction](https://sepolia.etherscan.io/tx/0x824c1f5a44aff746f8737b9e97d6e92d5e42a23a69d4627b6a8fe7de8e7d478d), [curated summary](data/sepolia-public.json) |
+| **ONCHAIN_READ** | Six Gate `eth_call` scenarios passed at saved block 12026859: valid middle and boundaries; listed, tampered and stale rejected | [curated summary](data/sepolia-public.json); original calldata/RPC report retained locally outside Git |
+| **OFFICIAL_CRE_SIMULATION** | Dataset and real Registry read matched epoch 1; audit report prepared | [audit log](evidence/cre-onchain-settings.txt) |
+| **LOCAL_TEST** | 16 Node and seven Foundry tests passed on 2026-10-30 | Commands below |
+
+Dataset ID: `0xa911b05f7ffdc54a7c72dfc23ca6f7ccaa8e15eec7af7c2ef1215254db6ff9ed` · Content hash: `0x847808cb140145db952ee309dc5229106e1923a0499ecd91e07dbe175fb42b57` · Count: 3. Full deployment/RPC receipts are ignored locally; the committed public summary is curated. A fresh six-case RPC read is available via `npm.cmd run onchain:proofs`; it refuses to overwrite an existing original report.
+
+## Reproduce on Windows PowerShell
+
+```powershell
+git clone https://github.com/chapaevv123/listproof.git
+cd listproof
+npm.cmd ci
+npm.cmd run check
+npm.cmd run demo
+npm.cmd run preflight
+npm.cmd run serve
+```
+
+Open `http://127.0.0.1:4173` and try valid `...06`, listed `...05`, stale and tampered examples. A downloadable receipt is a **local proof artifact**, not a blockchain receipt. Verify it against an independently obtained root and epoch:
 
 ```powershell
 node scripts/verify-receipt.mjs .\receipt.json --root 0xd5a80d20b41a1049e2a75edbc04761063113ea3002b8f575c4993284b8ab5888 --epoch 1
 ```
 
-The example root is the synthetic epoch-1 fixture. A root copied only from the same untrusted receipt is not an independent trust anchor.
-
-## Solidity and CRE verification
+With Docker Engine:
 
 ```powershell
-# With an available Docker Engine:
-docker run --rm --entrypoint forge -v "${PWD}:/app" -w /app ghcr.io/foundry-rs/foundry:stable build
-docker run --rm --entrypoint forge -v "${PWD}:/app" -w /app ghcr.io/foundry-rs/foundry:stable test -vvv
-
-# Read-only Sepolia Gate checks; no wallet or transaction:
-npm.cmd run onchain:proofs
-npm.cmd run public:evidence
-
-# The owner environment has Bun and authenticated CRE CLI installed.
-cd cre\listproof
-bun run typecheck
-cd ..
-# In a second terminal, from repository root: npm.cmd run serve
-cre workflow simulate listproof --target local-settings --non-interactive --trigger-index 0
-# Actual Sepolia Registry audit; no receiver or write:
-cre workflow simulate listproof --target onchain-settings --non-interactive --trigger-index 0
-cre workflow simulate listproof --target onchain-stale-settings --non-interactive --trigger-index 0
-# Expected failures, using pinned negative fixtures:
-cre workflow simulate listproof --target bad-hash-settings --non-interactive --trigger-index 0
-cre workflow simulate listproof --target bad-root-settings --non-interactive --trigger-index 0
-cre workflow simulate listproof --target stale-settings --non-interactive --trigger-index 0
-cre workflow simulate listproof --target invalid-schema-settings --non-interactive --trigger-index 0
-cre workflow simulate listproof --target unavailable-settings --non-interactive --trigger-index 0
+docker run --rm --entrypoint forge -v ".:/app" -w /app ghcr.io/foundry-rs/foundry:stable build
+docker run --rm --entrypoint forge -v ".:/app" -w /app ghcr.io/foundry-rs/foundry:stable test --via-ir --optimize -vvv
 ```
 
-The official [Windows CRE installation guide](https://docs.chain.link/cre/getting-started/cli-installation/windows) explains account setup. Use [the CRE runbook](docs/CRE-RUNBOOK.md) to execute all targets and capture logs.
+Read-only Sepolia checks need accessible RPC but no signer:
 
-The CRE configs point at the local synthetic dataset adapter. The new on-chain audit and negative targets are prepared but have **not** been run through CRE in this Codex sandbox. A live DON write still needs a verified workflow ID, forwarder, public dataset URL and authorized registry publisher transfer; it is not part of the current deployment. See the [read-only proof runbook](docs/ONCHAIN-PROOFS.md), [CRE runbook](docs/CRE-RUNBOOK.md), and [CRE simulation docs](https://docs.chain.link/cre/guides/operations/simulating-workflows).
+```powershell
+npm.cmd run onchain:proofs
+npm.cmd run public:evidence
+```
 
-## Free hosting preparation
+The first command preserves an existing ignored `evidence/sepolia-proof-calls.json`. For CRE, run `npm.cmd run serve` in one terminal; in another:
 
-The Node server supports `PORT` and `LISTPROOF_HOST`, exposes `/api/health` and a curated public Sepolia evidence summary at `/api/sepolia`. A [Dockerfile](Dockerfile) is included; no public deployment is verified. The public image runs only the read-only demo server, without the localhost MetaMask signing interface. For a remote CRE workflow, use a public dataset URL and recheck the pinned content hash.
+```powershell
+cd cre\listproof
+bun install --frozen-lockfile
+bun run typecheck
+cd ..\..
+powershell -NoProfile -File .\scripts\run-cre-simulations.ps1
+```
 
-## Threat model
+The CRE runner needs an authenticated official CLI and writes eight logs. See [CRE reproduction](docs/CRE-RUNBOOK.md).
 
-| Threat | Control | Limit |
-|---|---|---|
-| Forged neighbor or missing sibling | Root recomputation, index/count checks | Trusts published root |
-| Proof substitution | Target ordering and adjacency | Only selected dataset |
-| Stale proof | Registry current epoch/root/count | Publisher must update promptly |
-| Replay transfer/evidence | Sender nonce and one-use sender/recipient/epoch/root key | Demo ledger permits one transfer to a recipient per epoch |
-| Unauthorized root | Publisher check and sequential epoch | Publisher compromise remains possible |
-| Ambiguous source | Pinned schema and content hash | Source accuracy is a human/process question |
+## Security model
 
-## Bounty alignment and event status
+- The proof authenticates the publisher's **selected** set. It cannot prove source completeness or accuracy; fixtures are synthetic.
+- The publisher can update the Registry. Sequential epochs reject old updates, but publisher compromise can publish false data. CRE checks served bytes using a pinned content hash; the Gate checks current root/count/epoch.
+- Security assumes SHA-256 collision/preimage resistance, correct normalization and a trusted commitment. Local checks against an old fixture remain valid **only for that old fixture**.
+- CRE logs prove CLI simulation output, not DON quorum execution. A prepared report is not a transaction receipt.
+- The Gate is a test-only ledger, not ERC-20 or a production transfer policy. Reorganizations, source revocation and identity linkage are outside this demo.
 
-The intended CRE value is to fetch a pinned external dataset, verify its content and version, compute the commitment, compare a testnet registry state, and emit an auditable update report. The [Chainlink CRE docs](https://docs.chain.link/cre/overview) say local simulation is available, while live DON deployment requires access approval. The [BLI organizer page](https://bli.foundation/hackathon/) mentions judging November 5–December 5, 2026 and awards December 12, 2026. A [BLI organizer article](https://bli.tools/international-hackathon-with-ryo-digital-chainlink-labs-focuses-on-ai-payrails-stablecoins-more/) says October 31 is the submission date; the exact DoraHacks cutoff time and specific bounty rules were not independently verified. October 31, 2026 20:00 Europe/Kyiv is an internal deadline only.
+## Repository and submission
 
-## Submission status
+| Path | Role |
+|---|---|
+| `src/`, `test/` | Tree, independent verifier, adapter and Node tests |
+| `contracts/`, `test-solidity/`, `script/` | Registry, Gate, prepared receiver and Foundry tests |
+| `cre/listproof/` | CRE SDK workflow and simulation targets |
+| `scripts/`, `web/` | Proof API, evidence export and UI; separate localhost MetaMask deployment interface |
+| `data/`, `evidence/`, `docs/` | Synthetic fixtures, curated public facts, CLI logs and runbooks |
 
-See the [evidence report](docs/EVIDENCE.md), [Sepolia proof runbook](docs/ONCHAIN-PROOFS.md), [CRE runbook](docs/CRE-RUNBOOK.md), [public demo guide](docs/PUBLIC-DEMO.md), [competitor review](docs/COMPETITOR-REVIEW.md), [90-second demo script](docs/DEMO.md), and [DoraHacks draft](docs/SUBMISSION.md). Explorer links for deployment and root publication exist; public GitHub, demo and video URLs, live DON evidence and Gate `eth_call` results are missing.
+The [Dockerfile](Dockerfile) packages only the public demo server and selected evidence. A genuine local screenshot is above; there is **no verified hosted demo or video yet**. See [hosting](docs/PUBLIC-DEMO.md), [recording script](docs/DEMO.md) and [submission text](docs/SUBMISSION.md).
 
-For owner-approved Sepolia deployments through MetaMask, use the **localhost-only** [MetaMask deployment guide](docs/METAMASK-DEPLOY.md). This interface requires a separate ethers.js install in `deploy-ui` and a separate confirmation for each transaction. No deployment is implied by its presence.
+The [organizer's October 11 article](https://bli.tools/international-hackathon-with-ryo-digital-chainlink-labs-focuses-on-ai-payrails-stablecoins-more/) states **October 31, 2026** as the submission date and asks for public code, architecture documentation and a video demo. The [organizer page](https://bli.foundation/hackathon/) lists judging November 5–December 5 and awards December 12. The exact cutoff time and bounty-specific criteria were not verified from DoraHacks; confirm them in the live form. Licensed under [MIT](LICENSE).

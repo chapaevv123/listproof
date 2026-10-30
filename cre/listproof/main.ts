@@ -29,6 +29,7 @@ const onCron=(runtime:Runtime<Config>)=>{
  const c=runtime.config
  if(c.receiverAddress&&!c.registryAddress)throw Error('registry required for receiver')
  if(c.mode==='audit-current'&&c.receiverAddress)throw Error('audit mode must not configure receiver')
+ if(c.mode==='audit-current'&&!c.registryAddress)throw Error('audit mode requires registry')
  if(c.chainId!=='11155111')throw Error('Sepolia chain ID required')
  const fetched=runtime.runInNodeMode(fetchDataset,consensusIdenticalAggregation<{body:string;contentHash:string}>())().result()
  if(fetched.contentHash.toLowerCase()!==c.expectedContentHash.toLowerCase())throw Error('content hash mismatch')

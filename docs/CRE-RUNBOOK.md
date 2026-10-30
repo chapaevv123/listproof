@@ -13,7 +13,7 @@ cd ..\..
 powershell -NoProfile -File .\scripts\run-cre-simulations.ps1
 ```
 
-The runner saves eight logs under `evidence/` and exits nonzero if a positive target fails or a negative target does not show its expected rejection. Targets: local, deployed-Registry audit, on-chain stale epoch, bad hash, bad root, local stale epoch, invalid schema, and unavailable endpoint. These new target simulations have **not** yet been executed by Codex in the current sandbox; the Node adapter tests cover their local equivalents.
+The runner saves eight logs under `evidence/` and exits nonzero if a positive target fails or a negative target does not show its expected rejection. Targets: local, deployed-Registry audit, on-chain stale epoch, bad hash, bad root, local stale epoch, invalid schema, and unavailable endpoint. The owner-executed CLI logs for these eight targets are saved under `evidence/`. The audit target was also rerun directly on 2026-10-30 and exited 0 after reading the real Registry; a separate captured rerun log is retained without overwriting the original.
 
 For an on-chain read/write, copy `cre/listproof/config.sepolia.example.json` to ignored `cre/listproof/config.sepolia.json`, fill in the actual public dataset URL and verified registry/receiver addresses, then simulate `sepolia-settings`. The workflow checks registry dataset ID, epoch and previous root at a finalized block before preparing a report. Start with simulation and inspect status. Chainlink [CRE overview](https://docs.chain.link/cre/overview) says live DON deployment requires approval. `cre workflow supported-chains` is the appropriate tenant-specific network/forwarder discovery command; no forwarder address is hardcoded here.
 
