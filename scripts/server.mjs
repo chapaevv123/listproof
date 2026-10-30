@@ -65,7 +65,9 @@ const server=createServer(async(req,res)=>{
  const url=new URL(req.url,'http://localhost');
  if(platform&&await platform.handle(req,res,send,url))return;
  if(!platform&&url.pathname.startsWith('/api/v2/'))return send(res,503,{error:'Private workspace requires a durable database',code:'WORKSPACE_UNCONFIGURED'});
- if(req.method==='GET'&&url.pathname==='/')return send(res,200,readFileSync(new URL('../web/index.html',import.meta.url),'utf8'),'text/html; charset=utf-8');
+ if(req.method==='GET'&&url.pathname==='/'&&platform)return send(res,302,'','text/plain; charset=utf-8',{'location':'/workspace'});
+ if(req.method==='GET'&&url.pathname==='/workspace.html')return send(res,302,'','text/plain; charset=utf-8',{'location':'/workspace'});
+ if(req.method==='GET'&&['/','/demo'].includes(url.pathname))return send(res,200,readFileSync(new URL('../web/index.html',import.meta.url),'utf8'),'text/html; charset=utf-8');
  if(req.method==='GET'&&url.pathname==='/styles.css')return send(res,200,readFileSync(new URL('../web/styles.css',import.meta.url),'utf8'),'text/css; charset=utf-8');
  if(req.method==='GET'&&url.pathname==='/app.js')return send(res,200,readFileSync(new URL('../web/app.js',import.meta.url),'utf8'),'text/javascript; charset=utf-8');
  if(req.method==='GET'&&url.pathname==='/cases.js')return send(res,200,readFileSync(new URL('../web/cases.js',import.meta.url),'utf8'),'text/javascript; charset=utf-8');

@@ -4,7 +4,7 @@
 
 ## Architecture and scope
 
-The V3 public demo stays available at `/`. V4 adds `/workspace` and authenticated `/api/v2/*` routes when a database is configured. The Node server computes the same domain-separated Merkle commitments and witnesses as V3. Case records, notes, sessions, imports, screenings, and application audit events live in PostgreSQL in production or file-backed SQLite for local development. The production server refuses SQLite-only configuration because ephemeral host disks are not durable.
+On a configured V4 service, `/` redirects to the canonical V4 workspace at `/workspace`; `/workspace.html` redirects there as well. The V3 browser demo remains at `/demo`, and its public proof APIs remain available. The authenticated V4 API uses `/api/v2/*`. The Node server computes the same domain-separated Merkle commitments and witnesses as V3. Case records, notes, sessions, imports, screenings, and application audit events live in PostgreSQL in production or file-backed SQLite for local development. The production server refuses SQLite-only configuration because ephemeral host disks are not durable.
 
 `src/platform-db.mjs` applies schema migration 1. Dataset versions belong to a workspace except the two shared, explicitly synthetic fixtures. Imported sources start as `imported-unverified` drafts. Owner approval permits local screening; it does not verify provenance or publish a root. The web UI provides a V3 browser-local case replay option: it creates new screenings and cases, notes the prior case ID, and keeps the browser record intact. Historical V3 timestamps and audit events are not represented as server-authored V4 events.
 

@@ -10,6 +10,7 @@ test('HTTP adapter and complete proof scenarios',async()=>{
   const base=`http://127.0.0.1:${port}`;
   const health=await(await fetch(base+'/api/health')).json();assert.equal(health.localProofOnly,true);assert.equal(health.sepoliaContractsPublished,true);
   const html=await(await fetch(base+'/')).text();assert.match(html,/<script type="module" src="\/app\.js"><\/script>/);
+  const demo=await(await fetch(base+'/demo')).text();assert.match(demo,/<script type="module" src="\/app\.js"><\/script>/);
   const app=await fetch(base+'/app.js');assert.equal(app.status,200);assert.match(await app.text(),/independentVerification/);
   const style=await fetch(base+'/styles.css');assert.equal(style.status,200);assert.match(await style.text(),/#375bd2/i);
   const caseModule=await fetch(base+'/cases.js');assert.equal(caseModule.status,200);assert.match(await caseModule.text(),/class CaseStore/);

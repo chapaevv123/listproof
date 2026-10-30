@@ -28,6 +28,10 @@ test('V4 private HTTP API enforces session, CSRF and case workflow while V1 rema
   const get=path=>fetch(base+path);
   const post=(path,body,headers={})=>fetch(base+path,{method:'POST',headers:{'content-type':'application/json',...headers},body:JSON.stringify(body)});
   assert.equal((await(await get('/api/health')).json()).productVersion,'v4-rc');
+  const root=await fetch(base+'/',{redirect:'manual'});assert.equal(root.status,302);assert.equal(root.headers.get('location'),'/workspace');
+  const rootPage=await get('/');assert.equal(rootPage.url,base+'/workspace');assert.match(await rootPage.text(),/src="\/platform\.js"/);
+  const htmlAlias=await fetch(base+'/workspace.html',{redirect:'manual'});assert.equal(htmlAlias.status,302);assert.equal(htmlAlias.headers.get('location'),'/workspace');
+  const demo=await get('/demo');assert.equal(demo.status,200);assert.match(await demo.text(),/src="\/app\.js"/);
   assert.equal((await get('/api/v2/cases')).status,401);
   assert.equal((await get('/api/v2/openapi.json')).status,200);
   const creV4=await get('/api/v1/cre/v4');assert.equal(creV4.status,200);assert.equal((await creV4.json()).negativeReason,'content hash mismatch');
