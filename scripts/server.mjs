@@ -7,12 +7,12 @@ const load=n=>JSON.parse(readFileSync(new URL(`../data/epoch-${n}.json`,import.m
 const trees={1:build(load(1)),2:build(load(2))};
 const readCRELog=name=>{const raw=readFileSync(new URL(`../evidence/${name}`,import.meta.url));return raw[0]===0xff&&raw[1]===0xfe?raw.toString('utf16le').slice(1):raw.toString('utf8').replace(/^\uFEFF/,'');};
 const contentHash=n=>'0x'+createHash('sha256').update(JSON.stringify(load(n))).digest('hex');
-const send=(res,status,body,type='application/json')=>{res.writeHead(status,{'content-type':type,'cache-control':'no-store'});res.end(type==='application/json'?JSON.stringify(body):body);};
+const send=(res,status,body,type='application/json')=>{res.writeHead(status,{'content-type':type,'cache-control':'no-store','x-content-type-options':'nosniff','referrer-policy':'no-referrer','content-security-policy':"default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; object-src 'none'; form-action 'none'; frame-ancestors 'none'"});res.end(type==='application/json'?JSON.stringify(body):body);};
 const server=createServer(async(req,res)=>{
  const url=new URL(req.url,'http://localhost');
  if(req.method==='GET'&&url.pathname==='/')return send(res,200,readFileSync(new URL('../web/index.html',import.meta.url),'utf8'),'text/html; charset=utf-8');
  if(req.method==='GET'&&url.pathname==='/app.js')return send(res,200,readFileSync(new URL('../web/app.js',import.meta.url),'utf8'),'text/javascript; charset=utf-8');
- if(req.method==='GET'&&url.pathname==='/api/health')return send(res,200,{ok:true,mode:'synthetic-local',localProofOnly:true,sepoliaContractsPublished:true,creLocalEvidenceAvailable:existsSync(new URL('../evidence/cre-local-simulation.txt',import.meta.url))});
+ if(req.method==='GET'&&url.pathname==='/api/health')return send(res,200,{ok:true,mode:'synthetic-read-only',localProofOnly:true,sepoliaContractsPublished:true,creLocalEvidenceAvailable:existsSync(new URL('../evidence/cre-local-simulation.txt',import.meta.url))});
  if(req.method==='GET'&&url.pathname==='/evidence/cre-local-simulation.txt')return send(res,200,readCRELog('cre-local-simulation.txt'),'text/plain; charset=utf-8');
  if(req.method==='GET'&&url.pathname==='/evidence/cre-onchain-settings.txt')return send(res,200,readCRELog('cre-onchain-settings.txt'),'text/plain; charset=utf-8');
  if(req.method==='GET'&&/^\/dataset\/[12]$/.test(url.pathname))return send(res,200,load(Number(url.pathname.at(-1))));

@@ -1,0 +1,46 @@
+import assert from 'node:assert/strict';
+
+const [input,allowLocal]=process.argv.slice(2);
+if(!input)throw Error('Usage: node scripts/smoke-public.mjs https://YOUR-DEMO-URL/');
+const base=new URL(input);
+const local=allowLocal==='--allow-http-local'&&base.protocol==='http:'&&['127.0.0.1','localhost'].includes(base.hostname);
+if(base.protocol!=='https:'&&!local)throw Error('Use HTTPS, or --allow-http-local for loopback testing');
+if(base.username||base.password||base.search||base.hash||base.pathname!=='/')throw Error('Pass only the site origin with a trailing slash');
+const origin=base.origin;
+const get=async path=>fetch(origin+path,{signal:AbortSignal.timeout(90000)});
+const json=async(path,body)=>{
+ const response=await fetch(origin+path,{method:body?'POST':'GET',headers:body?{'content-type':'application/json'}:{},body:body?JSON.stringify(body):undefined,signal:AbortSignal.timeout(90000)});
+ assert.equal(response.status,200,path);
+ return response.json();
+};
+const a=n=>'0x'+n.toString(16).padStart(40,'0');
+
+const page=await get('/');
+assert.equal(page.status,200);
+assert.match(page.headers.get('content-security-policy')||'',/script-src 'self'/);
+assert.match(await page.text(),/Committed synthetic dataset/);
+const health=await json('/api/health');
+assert.equal(health.ok,true);
+assert.equal(health.mode,'synthetic-read-only');
+const states=await json('/api/state');
+assert.equal(states.length,2);
+assert.equal(states[0].root,'0xd5a80d20b41a1049e2a75edbc04761063113ea3002b8f575c4993284b8ab5888');
+const dataset=await json('/dataset/1');
+assert.equal(dataset.addresses.length,3);
+const evidence=await json('/api/sepolia');
+assert.equal(evidence.proofCheck.status,'verified-read-only');
+assert.equal(evidence.proofCheck.results.length,6);
+assert.ok(evidence.proofCheck.results.every(x=>x.passed));
+const audit=await get('/evidence/cre-onchain-settings.txt');
+assert.equal(audit.status,200);
+assert.match(await audit.text(),/read-only registry check; no transaction sent/);
+const proof=await json('/api/proof',{address:a(6),epoch:1,mode:'clean'});
+assert.equal(proof.status,'verified');
+assert.equal((await json('/api/verify',{proof:proof.proof,againstEpoch:1})).verified,true);
+assert.equal((await json('/api/proof',{address:a(5),epoch:1,mode:'listed'})).status,'listed');
+assert.equal((await json('/api/proof',{address:a(6),epoch:1,mode:'stale'})).status,'rejected');
+assert.equal((await json('/api/proof',{address:a(6),epoch:1,mode:'tampered'})).status,'rejected');
+for(const path of ['/deploy.js','/deploy.html','/api/artifact/ListProofRegistry','/api/publication/epoch-1','/api/evidence']){
+ assert.equal((await get(path)).status,404,'privileged path '+path);
+}
+console.log(JSON.stringify({origin,health:'pass',proofs:'valid/listed/stale/tampered pass',sepoliaReadCases:6,creAudit:'pass',privilegedPaths:'404'},null,2));

@@ -6,7 +6,7 @@ ListProof is a synthetic address-screening demonstration for BLI Legal Tech Hack
 
 **Explore:** [Registry](https://sepolia.etherscan.io/address/0x1607Af4E1DA1C06362871443d2e95C367B984Efa) · [Gate](https://sepolia.etherscan.io/address/0xf88F9870fe6e135d5bD56852750c8af8a466A9A3) · [epoch-1 transaction](https://sepolia.etherscan.io/tx/0x824c1f5a44aff746f8737b9e97d6e92d5e42a23a69d4627b6a8fe7de8e7d478d) · [evidence](docs/EVIDENCE.md) · [submission draft](docs/SUBMISSION.md).
 
-**Demo:** run `npm.cmd run serve` and open `http://127.0.0.1:4173`. No hosted demo URL has been verified. A judge needs no wallet to use the local proof demo.
+**Demo:** run `npm.cmd run serve` and open `http://127.0.0.1:4173`. A [read-only Docker/Render deployment](docs/PUBLIC-DEMO.md) is prepared, but no hosted demo URL has been verified. A judge needs no wallet to use the proof demo.
 
 ![Genuine local ListProof demo showing the synthetic dataset and saved Sepolia evidence](docs/assets/demo-desktop.png)
 

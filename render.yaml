@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: listproof-demo
+    runtime: docker
+    plan: free
+    repo: https://github.com/chapaevv123/listproof
+    branch: master
+    autoDeployTrigger: 'off'
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    envVars:
+      - key: LISTPROOF_HOST
+        value: 0.0.0.0
