@@ -1,5 +1,5 @@
 ﻿cre.exe : Initializing...
-C:\Users\Win10_Game_OS\Pulse\projects\listproof\scripts\run-cre-simulations.ps1:23 знак:15
+At C:\Users\Win10_Game_OS\Pulse\projects\listproof\scripts\run-cre-simulations.ps1:23 char:15
 + ...   $output = & $CreCommand workflow simulate .\listproof --target $nam ...
 +                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     + CategoryInfo          : NotSpecified: (Initializing...:String) [], RemoteException
@@ -10,15 +10,15 @@ Loading settings...
 or system environment.
 Checking RPC connectivity...
 Compiling workflow...
-тЬУ Workflow compiled
-тЬУ Simulation limits enabled
+✓ Workflow compiled
+✓ Simulation limits enabled
   HTTP: req=120kb resp=250kb timeout=10s | ConfHTTP: req=125kb resp=500kb timeout=1m30s | Consensus obs=25kb | ChainWrite evm_report=50kb evm_gas=10000000 solana_report=265b solana_cu=300000 | WASM binary=100mb compressed=20mb
-  Binary hash: 1c4cd1d0764e68b1845898a35d78fc0dce0a34bafebbd2f8f71f9f63b6929985
+  Binary hash: f46a20610648729b188f23acf0ae8b68e50025553dd629cd355ef54830de0ae8
   Config hash: 16c6518e601b92920ec455d2fa7c8fb04a7619940863e68e1cb05ba89b52baff
-2026-10-30T15:07:31Z [SIMULATION] Simulator Initialized
+2026-10-30T17:28:13Z [SIMULATION] Simulator Initialized
 
-2026-10-30T15:07:31Z [SIMULATION] Running trigger trigger=cron-trigger@1.0.0
-2026-10-30T15:07:31Z [SIMULATION] Received interrupt signal, stopping execution
-2026-10-30T15:07:31Z [SIMULATION] Skipping WorkflowEngineV2
-тЬЧ workflow execution failed: root mismatch
+2026-10-30T17:28:13Z [SIMULATION] Running trigger trigger=cron-trigger@1.0.0
+2026-10-30T17:28:14Z [SIMULATION] Received interrupt signal, stopping execution
+2026-10-30T17:28:14Z [SIMULATION] Skipping WorkflowEngineV2
+✗ workflow execution failed: root mismatch
 

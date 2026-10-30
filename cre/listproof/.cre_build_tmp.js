@@ -22284,7 +22284,7 @@ var address2 = (a) => {
 var word = (n) => numberToHex2(n, { size: 32 });
 var leaf = (chainId, id, epoch, a) => sha2565(concatHex2(["0x00", word(chainId), id, word(epoch), a]));
 var rootOf = (d) => {
-  if (d.schema !== "listproof-addresses-v1" || !Number.isSafeInteger(d.epoch) || d.epoch < 1 || !Array.isArray(d.addresses) || !d.addresses.length)
+  if (d.schema !== "listproof-addresses-v1" || !Number.isSafeInteger(d.epoch) || d.epoch < 1 || typeof d.chainId !== "string" || !/^\d+$/.test(d.chainId) || typeof d.datasetId !== "string" || !d.datasetId || typeof d.provenance !== "string" || !d.provenance.trim() || !Array.isArray(d.addresses) || !d.addresses.length || d.addresses.length > 1e5)
     throw Error("schema");
   const a = d.addresses.map(address2).sort();
   if (a.some((x, i) => i > 0 && x === a[i - 1]))
@@ -22310,6 +22310,8 @@ var onCron = (runtime) => {
     throw Error("registry required for receiver");
   if (c.mode === "audit-current" && c.receiverAddress)
     throw Error("audit mode must not configure receiver");
+  if (c.mode === "audit-current" && !c.registryAddress)
+    throw Error("audit mode requires registry");
   if (c.chainId !== "11155111")
     throw Error("Sepolia chain ID required");
   const fetched = runtime.runInNodeMode(fetchDataset, consensusIdenticalAggregation())().result();
@@ -22319,6 +22321,10 @@ var onCron = (runtime) => {
   if (data.chainId !== c.chainId || data.datasetId !== c.datasetId || data.epoch !== c.expectedEpoch)
     throw Error("version or dataset mismatch");
   const { root, count } = rootOf(data);
+  if (c.expectedCount !== undefined && (!Number.isSafeInteger(c.expectedCount) || count !== c.expectedCount))
+    throw Error("dataset count mismatch");
+  if (c.expectedProvenance !== undefined && data.provenance !== c.expectedProvenance)
+    throw Error("dataset provenance mismatch");
   if (root.toLowerCase() !== c.expectedRoot.toLowerCase())
     throw Error("root mismatch");
   const network = getNetwork({ chainFamily: "evm", chainSelectorName: "ethereum-testnet-sepolia" });
