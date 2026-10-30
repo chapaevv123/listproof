@@ -1,0 +1,1 @@
+{"schedule":"0 0 * * * *","datasetUrl":"http://127.0.0.1:4173/dataset/invalid","expectedContentHash":"0x109758e7a973a0f56e8ae8e0e09293e676abbf7e2e0db4ed712b143174e79eb2","expectedRoot":"0xd5a80d20b41a1049e2a75edbc04761063113ea3002b8f575c4993284b8ab5888","expectedEpoch":1,"chainId":"11155111","datasetId":"listproof-synthetic-demo","registryAddress":"","receiverAddress":""}

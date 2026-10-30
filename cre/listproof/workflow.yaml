@@ -1,0 +1,72 @@
+local-settings:
+  user-workflow:
+    workflow-name: listproof-root-audit-local
+    deployment-registry: private
+  workflow-artifacts:
+    workflow-path: ./main.ts
+    config-path: ./config.local.json
+    secrets-path: ""
+onchain-settings:
+  user-workflow:
+    workflow-name: listproof-registry-audit-sepolia
+    deployment-registry: private
+  workflow-artifacts:
+    workflow-path: ./main.ts
+    config-path: ./config.onchain.json
+    secrets-path: ""
+onchain-stale-settings:
+  user-workflow:
+    workflow-name: listproof-registry-audit-stale
+    deployment-registry: private
+  workflow-artifacts:
+    workflow-path: ./main.ts
+    config-path: ./config.onchain-stale.json
+    secrets-path: ""
+bad-hash-settings:
+  user-workflow:
+    workflow-name: listproof-root-audit-bad-hash
+    deployment-registry: private
+  workflow-artifacts:
+    workflow-path: ./main.ts
+    config-path: ./config.bad-hash.json
+    secrets-path: ""
+bad-root-settings:
+  user-workflow:
+    workflow-name: listproof-root-audit-bad-root
+    deployment-registry: private
+  workflow-artifacts:
+    workflow-path: ./main.ts
+    config-path: ./config.bad-root.json
+    secrets-path: ""
+stale-settings:
+  user-workflow:
+    workflow-name: listproof-root-audit-stale
+    deployment-registry: private
+  workflow-artifacts:
+    workflow-path: ./main.ts
+    config-path: ./config.stale.json
+    secrets-path: ""
+invalid-schema-settings:
+  user-workflow:
+    workflow-name: listproof-root-audit-invalid-schema
+    deployment-registry: private
+  workflow-artifacts:
+    workflow-path: ./main.ts
+    config-path: ./config.invalid-schema.json
+    secrets-path: ""
+unavailable-settings:
+  user-workflow:
+    workflow-name: listproof-root-audit-unavailable
+    deployment-registry: private
+  workflow-artifacts:
+    workflow-path: ./main.ts
+    config-path: ./config.unavailable.json
+    secrets-path: ""
+sepolia-settings:
+  user-workflow:
+    workflow-name: listproof-root-audit-sepolia
+    deployment-registry: private
+  workflow-artifacts:
+    workflow-path: ./main.ts
+    config-path: ./config.sepolia.json
+    secrets-path: ""

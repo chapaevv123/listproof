@@ -1,0 +1,11 @@
+import {readFileSync} from 'node:fs';
+import {build,nonmember} from '../src/core.mjs';
+import {verifyNonMembership} from '../src/verify.mjs';
+const load=n=>JSON.parse(readFileSync(new URL(`../data/epoch-${n}.json`,import.meta.url)));
+const first=build(load(1)), second=build(load(2));
+const target='0x0000000000000000000000000000000000000006';
+const proof=nonmember(first,target);
+const old={...first.context,root:first.root}, current={...second.context,root:second.root};
+const results={epoch1:{root:first.root,count:first.addresses.length,clean:verifyNonMembership(proof,old),listedRejected:!!(()=>{try{nonmember(first,first.addresses[1]);return false}catch{return true}})()},epoch2:{root:second.root,staleRejected:!verifyNonMembership(proof,current)},tamperedRejected:!verifyNonMembership({...proof,target:first.addresses[1]},old),contractStatus:'Registry and Gate deployed on Sepolia; this command runs only the local verifier',creStatus:'official local simulation evidence saved; no on-chain CRE write'};
+console.log(JSON.stringify(results,null,2));
+if(!results.epoch1.clean||!results.epoch1.listedRejected||!results.epoch2.staleRejected||!results.tamperedRejected)process.exitCode=1;

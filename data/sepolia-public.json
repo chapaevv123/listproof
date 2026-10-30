@@ -1,0 +1,77 @@
+{
+  "schema": "listproof-public-evidence-v1",
+  "chainId": 11155111,
+  "dataset": "synthetic",
+  "datasetId": "0xa911b05f7ffdc54a7c72dfc23ca6f7ccaa8e15eec7af7c2ef1215254db6ff9ed",
+  "epoch": 1,
+  "root": "0xd5a80d20b41a1049e2a75edbc04761063113ea3002b8f575c4993284b8ab5888",
+  "contentHash": "0x847808cb140145db952ee309dc5229106e1923a0499ecd91e07dbe175fb42b57",
+  "count": 3,
+  "registry": {
+    "address": "0x1607Af4E1DA1C06362871443d2e95C367B984Efa",
+    "deployTx": "0x3b08d7f5107f172db7d81e34756687249f68d70eefffc88b4a6660f8e48e51be",
+    "explorer": "https://sepolia.etherscan.io/address/0x1607Af4E1DA1C06362871443d2e95C367B984Efa"
+  },
+  "gate": {
+    "address": "0xf88F9870fe6e135d5bD56852750c8af8a466A9A3",
+    "deployTx": "0x6005065bea39d32a28a3097046ccab765c04b0cad267e9b8eee204f0e7abc7e5",
+    "explorer": "https://sepolia.etherscan.io/address/0xf88F9870fe6e135d5bD56852750c8af8a466A9A3"
+  },
+  "rootPublication": {
+    "transactionHash": "0x824c1f5a44aff746f8737b9e97d6e92d5e42a23a69d4627b6a8fe7de8e7d478d",
+    "blockNumber": 12026768,
+    "explorerTx": "https://sepolia.etherscan.io/tx/0x824c1f5a44aff746f8737b9e97d6e92d5e42a23a69d4627b6a8fe7de8e7d478d",
+    "verification": "Sepolia receipt, exact calldata, RootUpdated event, runtime bytecode, registry and Gate state"
+  },
+  "proofCheck": {
+    "status": "verified-read-only",
+    "blockNumber": 12026859,
+    "blockHash": "0xa9aecdd3601fbeefe26054017ffcbf8bf6d1d8107380f02f190b07d5ac435f31",
+    "verifiedAt": "2026-10-30T13:05:27.311Z",
+    "method": "eth_call at fixed Sepolia block; no transaction sent",
+    "results": [
+      {
+        "name": "valid-middle",
+        "expected": "success",
+        "passed": true,
+        "reason": null
+      },
+      {
+        "name": "listed-rejected",
+        "expected": "revert: proof",
+        "passed": true,
+        "reason": "proof"
+      },
+      {
+        "name": "tampered-rejected",
+        "expected": "revert: proof",
+        "passed": true,
+        "reason": "proof"
+      },
+      {
+        "name": "stale-epoch-rejected",
+        "expected": "revert: proof",
+        "passed": true,
+        "reason": "proof"
+      },
+      {
+        "name": "lower-boundary",
+        "expected": "success",
+        "passed": true,
+        "reason": null
+      },
+      {
+        "name": "upper-boundary",
+        "expected": "success",
+        "passed": true,
+        "reason": null
+      }
+    ]
+  },
+  "cre": {
+    "status": "local-simulation-only",
+    "logPath": "/evidence/cre-local-simulation.txt",
+    "onchainReceiverUpdate": false
+  },
+  "limitation": "Synthetic dataset non-membership only; not sanctions compliance or legal clearance"
+}

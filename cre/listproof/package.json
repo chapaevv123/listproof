@@ -1,0 +1,1 @@
+{"name":"listproof-cre","private":true,"type":"module","dependencies":{"@chainlink/cre-sdk":"1.21.1","viem":"2.37.13"},"devDependencies":{"typescript":"5.9.3"},"scripts":{"typecheck":"tsc --noEmit"}}

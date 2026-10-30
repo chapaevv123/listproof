@@ -1,0 +1,17 @@
+node_modules/
+artifacts/
+cache/
+coverage/
+.env
+*.log
+out/
+broadcast/
+lib/
+.env.*
+!.env.example
+cre/listproof/config.sepolia.json
+evidence/sepolia-deployments.json
+evidence/sepolia-deployments.json.tmp
+evidence/sepolia-root-publication.json
+evidence/sepolia-root-publication.json.tmp
+evidence/sepolia-proof-calls.json

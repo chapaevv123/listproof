@@ -1,0 +1,10 @@
+.git
+node_modules
+cre
+test
+test-solidity
+docs
+contracts
+deploy-ui
+*.log
+.env
