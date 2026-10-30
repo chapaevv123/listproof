@@ -10,6 +10,7 @@ const readCRELog=name=>{const raw=readFileSync(new URL(`../evidence/${name}`,imp
 const contentHash=n=>'0x'+createHash('sha256').update(JSON.stringify(load(n))).digest('hex');
 const send=(res,status,body,type='application/json',extra={})=>{res.writeHead(status,{'content-type':type,'cache-control':'no-store','x-content-type-options':'nosniff','referrer-policy':'no-referrer','content-security-policy':"default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; object-src 'none'; form-action 'none'; frame-ancestors 'none'",...extra});res.end(type==='application/json'?JSON.stringify(body):body);};
 const platform=(process.env.DATABASE_URL||process.env.LISTPROOF_DB_PATH)?await createPlatform():null;
+if(process.env.LISTPROOF_REQUIRE_DATABASE==='1'&&!platform)throw Error('LISTPROOF_REQUIRE_DATABASE requires a configured, reachable database');
 const rpcUrl=process.env.LISTPROOF_SEPOLIA_RPC_URL||'https://ethereum-sepolia-rpc.publicnode.com';
 if(!/^https:\/\//.test(rpcUrl))throw Error('Sepolia RPC URL must use HTTPS');
 const registry='0x1607Af4E1DA1C06362871443d2e95C367B984Efa';
@@ -46,6 +47,15 @@ function creEvidence(){
  if(!valid)throw Error('CRE audit log differs from published evidence');
  return {class:'OFFICIAL_CRE_SIMULATION',status:'verified-saved-log',observedSepoliaBlock:report.observedSepoliaBlock,registryObservation:report.registryObservation,publishStatus:report.publishStatus,root:report.root,contentHash:report.contentHash,count:report.count,logPath:'/evidence/cre-v3-onchain-settings.txt',logSha256:'0x'+createHash('sha256').update(raw).digest('hex'),liveDonExecution:false,onchainWrite:false};
 }
+function creV4Evidence(){
+ const raw=readCRELog('cre-public-audit-settings.txt'),negative=readCRELog('cre-v4-bad-hash.txt');
+ const match=raw.match(/\[USER LOG\] (\{[^\r\n]+\})/),bad=negative.match(/\[USER LOG\] (\{[^\r\n]+\})/);
+ if(!match||!bad||!raw.includes('Simulation complete'))throw Error('V4 CRE logs incomplete');
+ const report=JSON.parse(match[1]),rejection=JSON.parse(bad[1]);
+ const published=JSON.parse(readFileSync(new URL('../data/sepolia-public.json',import.meta.url),'utf8'));
+ if(report.schema!=='listproof-cre-audit-v1'||report.outcome!=='validated'||report.root!==published.root||report.contentHash!==published.contentHash||report.count!==published.count||report.epoch!==published.epoch||!report.registryObservation?.includes(`epoch=${published.epoch}`)||!report.publishStatus?.includes('no transaction sent')||rejection.outcome!=='rejected'||rejection.reasonCode!=='content hash mismatch')throw Error('V4 CRE evidence inconsistent');
+ return {class:'OFFICIAL_CRE_SIMULATION',status:'verified-saved-log',observedSepoliaBlock:report.observedSepoliaBlock,registryObservation:report.registryObservation,publishStatus:report.publishStatus,root:report.root,contentHash:report.contentHash,count:report.count,checks:report.checks,negativeReason:rejection.reasonCode,logPath:'/evidence/cre-public-audit-settings.txt',negativeLogPath:'/evidence/cre-v4-bad-hash.txt',logSha256:'0x'+createHash('sha256').update(raw).digest('hex'),negativeLogSha256:'0x'+createHash('sha256').update(negative).digest('hex'),liveDonExecution:false,onchainWrite:false};
+}
 const configuredLimit=Number(process.env.LISTPROOF_RATE_LIMIT||300);
 const rateLimit=Number.isSafeInteger(configuredLimit)&&configuredLimit>0&&configuredLimit<=1000?configuredLimit:300;
 const traffic=new Map();
@@ -62,10 +72,15 @@ const server=createServer(async(req,res)=>{
  if(req.method==='GET'&&url.pathname==='/workspace')return send(res,200,readFileSync(new URL('../web/workspace.html',import.meta.url),'utf8'),'text/html; charset=utf-8');
  if(req.method==='GET'&&url.pathname==='/platform.css')return send(res,200,readFileSync(new URL('../web/platform.css',import.meta.url),'utf8'),'text/css; charset=utf-8');
  if(req.method==='GET'&&url.pathname==='/platform.js')return send(res,200,readFileSync(new URL('../web/platform.js',import.meta.url),'utf8'),'text/javascript; charset=utf-8');
- if(req.method==='GET'&&url.pathname==='/api/health')return send(res,200,{ok:true,productVersion:platform?'v4-rc':'v3',mode:'synthetic-read-only',caseStorage:platform?platform.db.kind:'browser-local',privateWorkspaceEnabled:Boolean(platform),localProofOnly:true,sepoliaContractsPublished:true,creLocalEvidenceAvailable:existsSync(new URL('../evidence/cre-local-simulation.txt',import.meta.url))});
+ if(req.method==='GET'&&url.pathname==='/api/health'){
+  if(platform)try{const rows=await platform.db.query('SELECT version FROM schema_migrations ORDER BY version DESC LIMIT 1');if(rows[0]?.version!==1)throw Error('Migration unavailable');}catch{return send(res,503,{ok:false,code:'DATABASE_UNAVAILABLE',productVersion:'v4-rc'});}
+  return send(res,200,{ok:true,productVersion:platform?'v4-rc':'v3',mode:'synthetic-read-only',caseStorage:platform?platform.db.kind:'browser-local',privateWorkspaceEnabled:Boolean(platform),localProofOnly:true,sepoliaContractsPublished:true,creLocalEvidenceAvailable:existsSync(new URL('../evidence/cre-local-simulation.txt',import.meta.url))});
+ }
  if(req.method==='GET'&&url.pathname==='/evidence/cre-local-simulation.txt')return send(res,200,readCRELog('cre-local-simulation.txt'),'text/plain; charset=utf-8');
  if(req.method==='GET'&&url.pathname==='/evidence/cre-onchain-settings.txt')return send(res,200,readCRELog('cre-onchain-settings.txt'),'text/plain; charset=utf-8');
  if(req.method==='GET'&&url.pathname==='/evidence/cre-v3-onchain-settings.txt')return send(res,200,readCRELog('cre-v3-onchain-settings.txt'),'text/plain; charset=utf-8');
+ if(req.method==='GET'&&url.pathname==='/evidence/cre-public-audit-settings.txt')return send(res,200,readCRELog('cre-public-audit-settings.txt'),'text/plain; charset=utf-8');
+ if(req.method==='GET'&&url.pathname==='/evidence/cre-v4-bad-hash.txt')return send(res,200,readCRELog('cre-v4-bad-hash.txt'),'text/plain; charset=utf-8');
  if(req.method==='GET'&&/^\/dataset\/[12]$/.test(url.pathname))return send(res,200,load(Number(url.pathname.at(-1))));
  if(req.method==='GET'&&url.pathname==='/dataset/invalid')return send(res,200,JSON.parse(readFileSync(new URL('../data/invalid-schema.json',import.meta.url))));
  if(req.method==='GET'&&url.pathname==='/api/state')return send(res,200,Object.values(trees).map(t=>({epoch:t.context.epoch,root:t.root,count:t.addresses.length,context:t.context})));
@@ -73,6 +88,7 @@ const server=createServer(async(req,res)=>{
  if(req.method==='GET'&&url.pathname==='/api/v1/datasets')return send(res,200,Object.values(trees).map(t=>({schema:'listproof-addresses-v1',classification:'synthetic',epoch:t.context.epoch,chainId:t.context.chainId,datasetId:t.context.datasetId,datasetKey:t.context.datasetKey,root:t.root,count:t.addresses.length,contentHash:contentHash(t.context.epoch),provenance:load(t.context.epoch).provenance,addresses:t.addresses,registryPublished:t.context.epoch===1})));
  if(req.method==='GET'&&url.pathname==='/api/v1/registry/status')return send(res,200,await registryStatus());
  if(req.method==='GET'&&url.pathname==='/api/v1/cre/evidence')try{return send(res,200,creEvidence());}catch{return send(res,503,{error:'Saved CRE evidence unavailable or inconsistent',code:'CRE_EVIDENCE'});}
+ if(req.method==='GET'&&url.pathname==='/api/v1/cre/v4')try{return send(res,200,creV4Evidence());}catch{return send(res,503,{error:'V4 CRE evidence unavailable or inconsistent',code:'CRE_V4_EVIDENCE'});}
  if(req.method==='POST'&&['/api/verify','/api/v1/verify'].includes(url.pathname)){
   try{let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>100000)throw Error('Request too large');}
    const {proof,againstEpoch}=JSON.parse(raw),tree=trees[againstEpoch];if(!tree)throw Error('Unknown epoch');

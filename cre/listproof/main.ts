@@ -25,7 +25,7 @@ const fetchDataset=(node:NodeRuntime<Config>):{body:string;contentHash:string}=>
  if(response.statusCode!==200)throw Error(`dataset HTTP ${response.statusCode}`)
  return {body:new TextDecoder().decode(response.body),contentHash:sha256(response.body)}
 }
-const onCron=(runtime:Runtime<Config>)=>{
+const executeAudit=(runtime:Runtime<Config>)=>{
  const c=runtime.config
  if(c.receiverAddress&&!c.registryAddress)throw Error('registry required for receiver')
  if(c.mode==='audit-current'&&c.receiverAddress)throw Error('audit mode must not configure receiver')
@@ -79,8 +79,17 @@ const onCron=(runtime:Runtime<Config>)=>{
   const write=client.writeReport(runtime,{receiver:address(c.receiverAddress),report:signed,gasConfig:{gasLimit:'500000'}}).result()
   publishStatus=`CRE write result: txStatus=${write.txStatus}; txHash=${write.txHash?.length?bytesToHex(write.txHash):'none'}; receipt not verified by workflow`
  }
- const report={chainId:c.chainId,datasetId:c.datasetId,epoch:data.epoch,root,count,contentHash:fetched.contentHash,observedSepoliaBlock:observedBlock,registryObservation,publishStatus}
+ const report={schema:'listproof-cre-audit-v1',outcome:'validated',checks:['content-hash','schema','address-normalization','dataset-id','epoch','address-count','provenance','merkle-root',...(c.registryAddress?['finalized-registry-state']:[])],chainId:c.chainId,datasetId:c.datasetId,epoch:data.epoch,root,count,contentHash:fetched.contentHash,observedSepoliaBlock:observedBlock,registryObservation,publishStatus}
  runtime.log(JSON.stringify(report));return report
+}
+const onCron=(runtime:Runtime<Config>)=>{
+ try{return executeAudit(runtime)}catch(error){
+  const message=error instanceof Error?error.message:String(error)
+  const known=['content hash mismatch','schema','duplicate','bad address','version or dataset mismatch','dataset count mismatch','dataset provenance mismatch','root mismatch','registry current epoch mismatch','registry current root mismatch','registry current content mismatch','registry dataset mismatch','dataset HTTP 404']
+  const reasonCode=known.find(value=>message.includes(value))||'AUDIT_FAILED'
+  runtime.log(JSON.stringify({schema:'listproof-cre-audit-v1',outcome:'rejected',reasonCode}))
+  throw error
+ }
 }
 const initWorkflow=(config:Config)=>[handler(new CronCapability().trigger({schedule:config.schedule}),onCron)]
 export async function main(){const runner=await Runner.newRunner<Config>();await runner.run(initWorkflow)}

@@ -1,0 +1,25 @@
+﻿cre.exe : Initializing...
+строка:2 знак:11
++ $output = & cre workflow simulate .\listproof --target bad-hash-setti ...
++           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Initializing...:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+Loading settings...
+! Using default private key for chain write simulation. To use your own key, set CRE_ETH_PRIVATE_KEY in your .env file 
+or system environment.
+Checking RPC connectivity...
+Compiling workflow...
+✓ Workflow compiled
+✓ Simulation limits enabled
+  HTTP: req=120kb resp=250kb timeout=10s | ConfHTTP: req=125kb resp=500kb timeout=1m30s | Consensus obs=25kb | ChainWrite evm_report=50kb evm_gas=10000000 solana_report=265b solana_cu=300000 | WASM binary=100mb compressed=20mb
+  Binary hash: 8b5e7b1ddf2ade479ced913101b03af04bb63dbd8cb47ddd6bb8b1feef7e9c3f
+  Config hash: af74439ee165e74da48bd84a143f3fd507eb394d0090d049a2bdc5eb1eca6686
+2026-10-30T17:45:58Z [SIMULATION] Simulator Initialized
+
+2026-10-30T17:45:58Z [SIMULATION] Running trigger trigger=cron-trigger@1.0.0
+2026-10-30T17:45:58Z [USER LOG] {"schema":"listproof-cre-audit-v1","outcome":"rejected","reasonCode":"content hash mismatch"}
+2026-10-30T17:45:58Z [SIMULATION] Received interrupt signal, stopping execution
+2026-10-30T17:45:58Z [SIMULATION] Skipping WorkflowEngineV2
+✗ workflow execution failed: content hash mismatch
+

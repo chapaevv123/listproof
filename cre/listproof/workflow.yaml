@@ -14,6 +14,14 @@ onchain-settings:
     workflow-path: ./main.ts
     config-path: ./config.onchain.json
     secrets-path: ""
+public-audit-settings:
+  user-workflow:
+    workflow-name: listproof-public-registry-audit
+    deployment-registry: private
+  workflow-artifacts:
+    workflow-path: ./main.ts
+    config-path: ./config.public-audit.json
+    secrets-path: ""
 onchain-stale-settings:
   user-workflow:
     workflow-name: listproof-registry-audit-stale

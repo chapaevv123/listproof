@@ -23,6 +23,7 @@ const convert=(sql)=>{let i=0;return sql.replace(/\?/g,()=>'$'+(++i));};
 export async function openPlatformDb(options={}){
  const databaseUrl=options.databaseUrl??process.env.DATABASE_URL;
  const sqlitePath=options.sqlitePath??process.env.LISTPROOF_DB_PATH;
+ const migrate=options.migrate??process.env.NODE_ENV!=='production';
  if(!databaseUrl&&!sqlitePath)throw Error('A durable database path or DATABASE_URL is required');
  if(process.env.NODE_ENV==='production'&&!databaseUrl)throw Error('Production private workspace requires DATABASE_URL; local SQLite paths are not durable on ephemeral hosting');
  let db;
@@ -31,17 +32,25 @@ export async function openPlatformDb(options={}){
   const sslMode=process.env.LISTPROOF_DB_SSL||'verify';
   if(!['verify','disable'].includes(sslMode))throw Error('LISTPROOF_DB_SSL must be verify or disable');
   const pool=new Pool({connectionString:databaseUrl,max:5,connectionTimeoutMillis:5000,ssl:sslMode==='disable'?false:{rejectUnauthorized:true}});
+  pool.on('error',error=>console.error('ListProof PostgreSQL idle connection lost: '+(error.code||'unknown')));
   const query=(client,sql,params=[])=>client.query(convert(sql),params).then(x=>x.rows);
-  db={kind:'postgres',query:(sql,params)=>query(pool,sql,params),transaction:async fn=>{const client=await pool.connect();try{await client.query('BEGIN');const result=await fn({query:(sql,params)=>query(client,sql,params)});await client.query('COMMIT');return result;}catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}},close:()=>pool.end()};
+  db={kind:'postgres',query:(sql,params)=>query(pool,sql,params),transaction:async fn=>{const client=await pool.connect();try{await client.query('BEGIN');const result=await fn({kind:'postgres',query:(sql,params)=>query(client,sql,params)});await client.query('COMMIT');return result;}catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}},close:()=>pool.end()};
  }else{
   if(sqlitePath!==':memory:')mkdirSync(dirname(sqlitePath),{recursive:true});
   const connection=new DatabaseSync(sqlitePath,{timeout:5000});
   connection.exec('PRAGMA foreign_keys=ON');connection.exec('PRAGMA busy_timeout=5000');if(sqlitePath!==':memory:')connection.exec('PRAGMA journal_mode=WAL');
   const query=(sql,params=[])=>{const statement=connection.prepare(sql);return /^\s*(SELECT|WITH|PRAGMA)/i.test(sql)?statement.all(...params):(statement.run(...params),[]);};
-  db={kind:'sqlite',query:async(sql,params)=>query(sql,params),transaction:async fn=>{connection.exec('BEGIN IMMEDIATE');try{const result=await fn({query:async(sql,params)=>query(sql,params)});connection.exec('COMMIT');return result;}catch(error){connection.exec('ROLLBACK');throw error;}},close:async()=>connection.close()};
+  db={kind:'sqlite',query:async(sql,params)=>query(sql,params),transaction:async fn=>{connection.exec('BEGIN IMMEDIATE');try{const result=await fn({kind:'sqlite',query:async(sql,params)=>query(sql,params)});connection.exec('COMMIT');return result;}catch(error){connection.exec('ROLLBACK');throw error;}},close:async()=>connection.close()};
  }
- await db.query('CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)');
- const applied=await db.query('SELECT version FROM schema_migrations WHERE version=?',[1]);
- if(!applied.length)await db.transaction(async tx=>{for(const sql of ddl)await tx.query(sql);await tx.query('INSERT INTO schema_migrations(version,applied_at) VALUES(?,?)',[1,new Date().toISOString()]);});
+ try{
+  if(migrate)await db.transaction(async tx=>{
+   if(tx.kind==='postgres')await tx.query('SELECT pg_advisory_xact_lock(1279877434)');
+   await tx.query('CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)');
+   const applied=await tx.query('SELECT version FROM schema_migrations WHERE version=?',[1]);
+   if(!applied.length){for(const sql of ddl)await tx.query(sql);await tx.query('INSERT INTO schema_migrations(version,applied_at) VALUES(?,?)',[1,new Date().toISOString()]);}
+  });
+  const versions=await db.query('SELECT version FROM schema_migrations ORDER BY version');
+  if(versions.length!==1||versions[0].version!==1)throw Error('Unsupported or missing platform database migration; run migrate:platform');
+ }catch(error){await db.close();throw error;}
  return db;
 }

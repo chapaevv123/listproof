@@ -1,5 +1,9 @@
 # DoraHacks submission package — draft for owner review
 
+## V4 continuation addendum (not submitted)
+
+The V4 branch adds a locally verified private workspace with PostgreSQL migrations, authenticated and role-scoped cases, server-side audit events, batch screening and draft dataset imports. A temporary local PostgreSQL instance passed the server restart and cross-workspace denial test. The public URL below remains V3; no persistent public V4 claim should be submitted until a separate staging endpoint passes [the staging runbook](V4-OPERATIONS.md). The official CRE CLI now also has a [successful public-HTTPS audit simulation](../evidence/cre-public-audit-settings.txt) and structured negative evidence; [live DON deployment is blocked by deploy access](CRE-V4-FEASIBILITY.md). A [135-second V4 shot list](V4-DEMO-SCRIPT.md) is ready, but no V4 video has been recorded. The official-source [assessment](DATASET-SOURCES-V4.md) does not claim live sanctions coverage.
+
 **Project:** ListProof
 
 **Tagline:** Cryptographic evidence that an address is absent from one versioned, committed dataset.

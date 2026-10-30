@@ -2,6 +2,8 @@
 
 **Existing URL:** https://listproof-e5sp.onrender.com/
 
+The public V3 smoke was rerun successfully on 2026-10-30 after the local V4 release candidate. This page describes the **existing V3 service**. The separate V4 staging plan is in [V4 operations](V4-OPERATIONS.md); no V4 public endpoint has been deployed.
+
 The service uses the existing Render Free Docker deployment. The repository Blueprint disables automatic deployment, so a Git push alone does not prove that V3 is live. Check /api/health for **productVersion: v3**, then run the external smoke command. Until both pass, the hosted URL may serve the prior interface.
 
 ## Release gates

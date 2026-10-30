@@ -4,12 +4,13 @@ COPY package.json ./package.json
 COPY package-lock.json ./package-lock.json
 RUN npm ci --omit=dev
 COPY src/core.mjs src/verify.mjs src/platform-api.mjs src/platform-auth.mjs src/platform-db.mjs src/platform-store.mjs ./src/
-COPY scripts/server.mjs scripts/bootstrap-owner.mjs ./scripts/
+COPY scripts/server.mjs scripts/bootstrap-owner.mjs scripts/migrate-platform.mjs ./scripts/
 COPY web/index.html web/styles.css web/app.js web/cases.js web/workspace.html web/platform.css web/platform.js ./web/
 COPY data/epoch-1.json data/epoch-2.json data/invalid-schema.json data/sepolia-public.json ./data/
 COPY evidence/cre-local-simulation.txt ./evidence/cre-local-simulation.txt
 COPY evidence/cre-onchain-settings.txt ./evidence/cre-onchain-settings.txt
 COPY evidence/cre-v3-onchain-settings.txt ./evidence/cre-v3-onchain-settings.txt
+COPY evidence/cre-public-audit-settings.txt evidence/cre-v4-bad-hash.txt ./evidence/
 ENV PORT=4173
 ENV LISTPROOF_HOST=0.0.0.0
 USER node

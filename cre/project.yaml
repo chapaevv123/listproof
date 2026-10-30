@@ -6,6 +6,10 @@ onchain-settings:
   rpcs:
     - chain-name: ethereum-testnet-sepolia
       url: https://ethereum-sepolia-rpc.publicnode.com
+public-audit-settings:
+  rpcs:
+    - chain-name: ethereum-testnet-sepolia
+      url: https://ethereum-sepolia-rpc.publicnode.com
 onchain-stale-settings:
   rpcs:
     - chain-name: ethereum-testnet-sepolia

@@ -7,15 +7,22 @@ import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {unlinkSync,existsSync} from 'node:fs';
 import {openPlatformDb} from '../src/platform-db.mjs';
-import {bootstrapOwner} from '../src/platform-auth.mjs';
+import {bootstrapOwner,addUser,passwordHash} from '../src/platform-auth.mjs';
 const freePort=()=>new Promise((resolve,reject)=>{const s=createServer();s.listen(0,'127.0.0.1',()=>{const port=s.address().port;s.close(()=>resolve(port));});s.on('error',reject);});
 const a=n=>'0x'+n.toString(16).padStart(40,'0');
 test('V4 private HTTP API enforces session, CSRF and case workflow while V1 remains public',async()=>{
  const path=join(tmpdir(),'listproof-v4-http-'+randomUUID()+'.sqlite');
  const db=await openPlatformDb({sqlitePath:path});
- await bootstrapOwner(db,{email:'owner@example.test',password:'correct horse battery staple',orgSlug:'alpha-org',orgName:'Alpha'});await db.close();
+ const owner=await bootstrapOwner(db,{email:'owner@example.test',password:'correct horse battery staple',orgSlug:'alpha-org',orgName:'Alpha'});
+ await addUser(db,{actor:{userId:owner.userId,orgId:owner.orgId,role:'owner'},orgId:owner.orgId,email:'auditor@example.test',password:'correct horse battery staple',role:'auditor'});
+ const otherOrg=randomUUID(),otherUser=randomUUID(),createdAt=new Date().toISOString();
+ await db.query('INSERT INTO organizations(id,slug,name,created_at) VALUES(?,?,?,?)',[otherOrg,'other-org','Other',createdAt]);
+ await db.query('INSERT INTO users(id,email,password_hash,created_at) VALUES(?,?,?,?)',[otherUser,'other@example.test',await passwordHash('correct horse battery staple'),createdAt]);
+ await db.query('INSERT INTO memberships(org_id,user_id,role,created_at) VALUES(?,?,?,?)',[otherOrg,otherUser,'owner',createdAt]);
+ await db.close();
  const port=await freePort(),base='http://127.0.0.1:'+port;
- const child=spawn(process.execPath,['scripts/server.mjs'],{env:{...process.env,LISTPROOF_DB_PATH:path,LISTPROOF_PORT:String(port),LISTPROOF_HOST:'127.0.0.1'},stdio:'ignore'});
+ const start=()=>spawn(process.execPath,['scripts/server.mjs'],{env:{...process.env,LISTPROOF_DB_PATH:path,LISTPROOF_PORT:String(port),LISTPROOF_HOST:'127.0.0.1'},stdio:'ignore'});
+ let child=start();
  try{
   let ready=false;for(let i=0;i<100;i++){try{const r=await fetch(base+'/api/health');if(r.ok){ready=true;break;}}catch{}await new Promise(r=>setTimeout(r,40));}assert.ok(ready,'V4 server started');
   const get=path=>fetch(base+path);
@@ -23,6 +30,7 @@ test('V4 private HTTP API enforces session, CSRF and case workflow while V1 rema
   assert.equal((await(await get('/api/health')).json()).productVersion,'v4-rc');
   assert.equal((await get('/api/v2/cases')).status,401);
   assert.equal((await get('/api/v2/openapi.json')).status,200);
+  const creV4=await get('/api/v1/cre/v4');assert.equal(creV4.status,200);assert.equal((await creV4.json()).negativeReason,'content hash mismatch');
   for(const [path,type] of [['/workspace','text/html'],['/platform.css','text/css'],['/platform.js','text/javascript']]){
    const asset=await get(path);assert.equal(asset.status,200,path);assert.ok(asset.headers.get('content-type').startsWith(type));assert.ok((await asset.text()).length>100);
   }
@@ -49,6 +57,22 @@ test('V4 private HTTP API enforces session, CSRF and case workflow while V1 rema
   assert.equal((await post('/api/v2/datasets/'+version.id+'/approve',{},auth)).status,200);
   assert.equal((await post('/api/v2/logout',{},auth)).status,200);
   assert.equal((await fetch(base+'/api/v2/cases',{headers:{cookie}})).status,401);
+  child.kill();await new Promise(resolve=>child.once('exit',resolve));child=start();
+  let restarted=false;for(let i=0;i<100;i++){try{const r=await get('/api/health');if(r.ok){restarted=true;break;}}catch{}await new Promise(r=>setTimeout(r,40));}assert.ok(restarted,'V4 server restarted with same database');
+  const relogin=await post('/api/v2/login',{email:'owner@example.test',password:'correct horse battery staple',orgSlug:'alpha-org'});
+  assert.equal(relogin.status,200);const ownerCookie=relogin.headers.get('set-cookie').split(';')[0],ownerSession=await relogin.json();
+  const persisted=await fetch(base+'/api/v2/cases/'+item.id,{headers:{cookie:ownerCookie}});
+  assert.equal(persisted.status,200);const recovered=await persisted.json();
+  assert.equal(recovered.status,'Evidence Verified');assert.equal(recovered.notes[0].body,'Reviewed proof metadata');assert.equal(recovered.auditChainValid,true);
+  const again=await post('/api/v2/cases/'+item.id+'/reverify',{}, {cookie:ownerCookie,'x-csrf-token':ownerSession.csrf});
+  assert.equal(again.status,200);assert.equal((await again.json()).screening.latestVerification.verified,true);
+  const foreign=await post('/api/v2/login',{email:'other@example.test',password:'correct horse battery staple',orgSlug:'other-org'});
+  assert.equal(foreign.status,200);const foreignCookie=foreign.headers.get('set-cookie').split(';')[0],foreignSession=await foreign.json();
+  assert.equal((await fetch(base+'/api/v2/cases/'+item.id,{headers:{cookie:foreignCookie}})).status,404);
+  assert.equal((await post('/api/v2/cases/'+item.id+'/notes',{body:'Cross-workspace edit'},{cookie:foreignCookie,'x-csrf-token':foreignSession.csrf})).status,404);
+  const auditLogin=await post('/api/v2/login',{email:'auditor@example.test',password:'correct horse battery staple',orgSlug:'alpha-org'});
+  const auditCookie=auditLogin.headers.get('set-cookie').split(';')[0],auditSession=await auditLogin.json();
+  assert.equal((await post('/api/v2/cases/'+item.id+'/status',{status:'Closed'},{cookie:auditCookie,'x-csrf-token':auditSession.csrf})).status,403);
   for(const path of ['/deploy.html','/api/publication/epoch-1'])assert.equal((await get(path)).status,404);
  }finally{
   child.kill();

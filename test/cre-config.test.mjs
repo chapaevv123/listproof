@@ -34,3 +34,19 @@ test('on-chain CRE audit config matches published epoch-1 commitment',()=>{
  assert.equal(stale.mode,'audit-current');assert.equal(stale.expectedEpoch,2);
  assert.equal(stale.registryAddress.toLowerCase(),REGISTRY.toLowerCase());
 });
+test('public HTTPS CRE audit target and saved structured simulations agree with pinned commitment',()=>{
+ const config=read('cre/listproof/config.public-audit.json'),commitment=epochOneCommitment();
+ assert.equal(config.datasetUrl,'https://listproof-e5sp.onrender.com/dataset/1');
+ assert.equal(config.mode,'audit-current');assert.equal(config.receiverAddress,'');
+ assert.equal(config.expectedContentHash,commitment.contentHash);assert.equal(config.expectedRoot,commitment.root);
+ assert.equal(auditDataset(dataset('epoch-1'),config).root,commitment.root);
+ const success=readFileSync(new URL('evidence/cre-public-audit-settings.txt',root),'utf8');
+ const match=success.match(/\[USER LOG\] (\{[^\r\n]+\})/);assert.ok(match);
+ const report=JSON.parse(match[1]);assert.equal(report.schema,'listproof-cre-audit-v1');assert.equal(report.outcome,'validated');
+ assert.equal(report.root,commitment.root);assert.equal(report.contentHash,commitment.contentHash);
+ assert.ok(report.checks.includes('finalized-registry-state'));assert.match(report.publishStatus,/no transaction sent/);
+ assert.match(success,/Simulation complete/);
+ const failure=readFileSync(new URL('evidence/cre-v4-bad-hash.txt',root),'utf8');
+ assert.match(failure,/"outcome":"rejected","reasonCode":"content hash mismatch"/);
+ assert.doesNotMatch(failure,/Simulation complete/);
+});

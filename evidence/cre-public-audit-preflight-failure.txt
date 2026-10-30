@@ -1,0 +1,15 @@
+﻿cre.exe : Initializing...
+строка:2 знак:11
++ $output = & cre workflow simulate .\listproof --target public-audit-s ...
++           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Initializing...:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+Loading settings...
+✗ no RPC URLs found for target "public-audit-settings"                                           
+                                                                                                 
+To fix:                                                                                          
+  • Check that your project.yaml has an 'rpcs' section under the target "public-audit-settings"  
+  • Ensure chain names are valid (run 'cre workflow supported-chains' to see all supported names)
+  • Verify the correct target is selected via --target or CRE_TARGET                             
+

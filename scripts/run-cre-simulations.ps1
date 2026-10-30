@@ -1,5 +1,6 @@
-param([string]$CreCommand = 'cre')
+param([string]$CreCommand = 'cre', [string]$LogSuffix = '')
 $ErrorActionPreference = 'Stop'
+if ($LogSuffix -notmatch '^(-[a-z0-9]+)?$') { throw 'LogSuffix must be empty or a simple -name suffix' }
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $creRoot = Join-Path $projectRoot 'cre'
 $evidenceRoot = Join-Path $projectRoot 'evidence'
@@ -18,7 +19,7 @@ Push-Location $creRoot
 try {
   foreach ($target in $targets) {
     $name = $target.Name
-    $log = Join-Path $evidenceRoot "cre-$name.txt"
+    $log = Join-Path $evidenceRoot "cre-$name$LogSuffix.txt"
     $ErrorActionPreference = 'Continue'
     $output = & $CreCommand workflow simulate .\listproof --target $name --non-interactive --trigger-index 0 2>&1 | Out-String
     $exit = $LASTEXITCODE

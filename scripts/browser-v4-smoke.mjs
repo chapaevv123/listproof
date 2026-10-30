@@ -37,14 +37,26 @@ try{
  await until(()=>evaluate("return Boolean(document.querySelector('#save-screen-case'))"),'screening result');
  await evaluate("document.querySelector('#save-screen-case').click()");
  await until(()=>evaluate("return Boolean(document.querySelector('#case-note-form'))"),'case page');
+ await evaluate("document.querySelector('#case-status-change').value='Under Review';document.querySelector('#case-update-status').click()");
+ await until(()=>evaluate("return document.querySelector('#case-status-change')?.value==='Under Review' && document.querySelector('.platform-content')?.textContent.includes('STATUS CHANGED')"),'case status');
  await evaluate("document.querySelector('#case-note').value='Browser smoke review';document.querySelector('#case-note-form').requestSubmit()");
  await until(()=>evaluate("return document.querySelector('.platform-content')?.textContent.includes('Browser smoke review')"),'note persisted');
  await evaluate("document.querySelector('#case-reverify').click()");
  await until(()=>evaluate("return document.querySelector('.platform-content')?.textContent.includes('EVIDENCE REVERIFIED')"),'reverification event');
+ const exported=await evaluate("const prior=URL.createObjectURL;URL.createObjectURL=blob=>{window.__lastEvidenceBlob=blob;return prior.call(URL,blob)};document.querySelector('#case-bundle').click();const body=JSON.parse(await window.__lastEvidenceBlob.text());URL.createObjectURL=prior;return {schema:body.schema,status:body.case.status,auditChainValid:body.case.auditChainValid}");
+ assert.deepEqual(exported,{schema:'listproof-v4-case-bundle-v1',status:'Under Review',auditChainValid:true});
+ await command('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});await pause(3700);
+ const caseShot=await command('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});
+ writeFileSync(new URL('../docs/assets/v4-case-workbench-local.png',import.meta.url),Buffer.from(caseShot.data,'base64'));
  await evaluate("document.querySelector('#case-inspect').click()");
  await until(()=>evaluate("return Boolean(document.querySelector('#verify-proof'))"),'proof inspector');
  await evaluate("document.querySelector('#verify-proof').click()");
  await until(()=>evaluate("return document.querySelector('.platform-content')?.textContent.includes('Proof verified')"),'proof verification');
+ await evaluate("location.hash='#cre'");
+ await until(()=>evaluate("return document.querySelector('.platform-content')?.textContent.includes('Checks in the signed simulation report')"),'CRE operations evidence');
+ assert.equal(await evaluate("return document.querySelector('.platform-content')?.textContent.includes('content hash mismatch')"),true);
+ const creShot=await command('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});
+ writeFileSync(new URL('../docs/assets/v4-cre-operations-local.png',import.meta.url),Buffer.from(creShot.data,'base64'));
  await command('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
  await pause(200);
  const mobile=await evaluate("return {width:innerWidth,scrollWidth:document.documentElement.scrollWidth,navDisplay:getComputedStyle(document.querySelector('.platform-nav')).display,navDirection:getComputedStyle(document.querySelector('.platform-nav')).flexDirection}");
@@ -61,7 +73,7 @@ try{
  await pause(200);
  const screenshot=await command('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});
  writeFileSync(new URL('../docs/assets/v4-workspace-local.png',import.meta.url),Buffer.from(screenshot.data,'base64'));
- console.log(JSON.stringify({login:true,screening:true,caseNote:true,reverification:true,proofVerified:true,mobile,screenshots:['docs/assets/v4-workspace-local.png','docs/assets/v4-workspace-mobile.png']}));
+ console.log(JSON.stringify({login:true,screening:true,caseStatus:true,caseNote:true,reverification:true,evidenceExport:true,proofVerified:true,creEvidence:true,mobile,screenshots:['docs/assets/v4-workspace-local.png','docs/assets/v4-workspace-mobile.png','docs/assets/v4-case-workbench-local.png','docs/assets/v4-cre-operations-local.png']}));
 }finally{
  ws?.close();browser?.kill();server?.kill();
  if(server&&server.exitCode===null)await new Promise(resolve=>server.once('exit',resolve));

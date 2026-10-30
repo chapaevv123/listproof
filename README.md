@@ -4,6 +4,8 @@
 
 V4 private workspace release candidate: [architecture, setup, limitations and demo script](docs/V4-RELEASE-CANDIDATE.md). The public V3 deployment on master remains unchanged.
 
+V4 operations: [staging, migrations and backups](docs/V4-OPERATIONS.md) · [CRE feasibility and evidence](docs/CRE-V4-FEASIBILITY.md) · [official source assessment](docs/DATASET-SOURCES-V4.md) · [135-second demo script](docs/V4-DEMO-SCRIPT.md). V4 is not publicly deployed.
+
 ListProof is a synthetic address-screening demonstration for BLI Legal Tech Hackathon 2, targeting Chainlink's **Best workflow with CRE** bounty. The claim is limited to a particular dataset and epoch. It does **not** establish sanctions compliance, legal clearance, identity, or source completeness.
 
 **Explore:** [Registry](https://sepolia.etherscan.io/address/0x1607Af4E1DA1C06362871443d2e95C367B984Efa) · [Gate](https://sepolia.etherscan.io/address/0xf88F9870fe6e135d5bD56852750c8af8a466A9A3) · [epoch-1 transaction](https://sepolia.etherscan.io/tx/0x824c1f5a44aff746f8737b9e97d6e92d5e42a23a69d4627b6a8fe7de8e7d478d) · [evidence](docs/EVIDENCE.md) · [submission draft](docs/SUBMISSION.md).

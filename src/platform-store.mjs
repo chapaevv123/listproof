@@ -43,7 +43,7 @@ async function getVersion(db,actor,id){
  return row;
 }
 async function getCaseRow(db,actor,id){
- const row=(await db.query('SELECT c.*,s.address,s.result,s.receipt_json,s.initial_verification_json,s.latest_verification_json,s.dataset_version_id,s.created_at screening_created_at FROM cases c JOIN screenings s ON s.id=c.screening_id WHERE c.id=? AND c.org_id=?',[id,actor.orgId]))[0];
+ const row=(await db.query('SELECT c.*,s.address,s.result,s.receipt_json,s.initial_verification_json,s.latest_verification_json,s.dataset_version_id,s.created_at screening_created_at FROM cases c JOIN screenings s ON s.id=c.screening_id WHERE c.id=? AND c.org_id=?'+(db.kind==='postgres'?' FOR UPDATE OF c':''),[id,actor.orgId]))[0];
  if(!row)fail('Case not found',404);
  return row;
 }
@@ -104,7 +104,7 @@ export function createPlatformStore(db){
    if(actor.role==='auditor')fail('Read-only role',403);
    if(typeof screeningId!=='string')fail('Invalid screening ID');
    return db.transaction(async tx=>{
-    const screen=(await tx.query('SELECT * FROM screenings WHERE id=? AND org_id=?',[screeningId,actor.orgId]))[0];
+    const screen=(await tx.query('SELECT * FROM screenings WHERE id=? AND org_id=?'+(tx.kind==='postgres'?' FOR UPDATE':''),[screeningId,actor.orgId]))[0];
     if(!screen)fail('Screening not found',404);
     const existing=(await tx.query('SELECT id FROM cases WHERE screening_id=? AND org_id=?',[screeningId,actor.orgId]))[0];
     if(existing)return this.case(actor,existing.id);

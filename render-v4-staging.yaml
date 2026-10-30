@@ -1,0 +1,23 @@
+# Separate, optional Blueprint. Import only after the owner provisions PostgreSQL.
+# The existing render.yaml and listproof-demo V3 service stay on master.
+services:
+  - type: web
+    name: listproof-v4-staging
+    runtime: docker
+    plan: free
+    repo: https://github.com/chapaevv123/listproof
+    branch: feat/listproof-v4-platform
+    autoDeployTrigger: 'off'
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    envVars:
+      - key: LISTPROOF_HOST
+        value: 0.0.0.0
+      - key: NODE_ENV
+        value: production
+      - key: LISTPROOF_REQUIRE_DATABASE
+        value: '1'
+      - key: LISTPROOF_DB_SSL
+        value: verify
+      - key: DATABASE_URL
+        sync: false
