@@ -1,7 +1,7 @@
 import {CronCapability, HTTPClient, EVMClient, Runner, handler, consensusIdenticalAggregation, getNetwork, encodeCallMsg, LAST_FINALIZED_BLOCK_NUMBER, protoBigIntToBigint, prepareReportRequest, type NodeRuntime, type Runtime} from '@chainlink/cre-sdk'
 import {sha256, concatHex, numberToHex, toHex, encodeFunctionData, decodeFunctionResult, encodeAbiParameters, parseAbiParameters, bytesToHex, zeroAddress} from 'viem'
 
-type Config={schedule:string;datasetUrl:string;expectedContentHash:string;expectedRoot:string;expectedEpoch:number;chainId:string;datasetId:string;registryAddress:string;receiverAddress:string;expectedPreviousRoot?:string;mode?:'audit-current'|'publish-next'}
+type Config={schedule:string;datasetUrl:string;expectedContentHash:string;expectedRoot:string;expectedEpoch:number;expectedCount?:number;expectedProvenance?:string;chainId:string;datasetId:string;registryAddress:string;receiverAddress:string;expectedPreviousRoot?:string;mode?:'audit-current'|'publish-next'}
 type Dataset={schema:string;chainId:string;datasetId:string;epoch:number;addresses:string[];provenance:string}
 const registryAbi=[
  {type:'function',name:'root',stateMutability:'view',inputs:[],outputs:[{type:'bytes32'}]},
@@ -14,7 +14,7 @@ const address=(a:string)=>{if(!/^0x[0-9a-fA-F]{40}$/.test(a))throw Error('bad ad
 const word=(n:bigint)=>numberToHex(n,{size:32})
 const leaf=(chainId:bigint,id:`0x${string}`,epoch:bigint,a:`0x${string}`)=>sha256(concatHex(['0x00',word(chainId),id,word(epoch),a]))
 const rootOf=(d:Dataset)=>{
- if(d.schema!=='listproof-addresses-v1'||!Number.isSafeInteger(d.epoch)||d.epoch<1||!Array.isArray(d.addresses)||!d.addresses.length)throw Error('schema')
+ if(d.schema!=='listproof-addresses-v1'||!Number.isSafeInteger(d.epoch)||d.epoch<1||typeof d.chainId!=='string'||!/^\d+$/.test(d.chainId)||typeof d.datasetId!=='string'||!d.datasetId||typeof d.provenance!=='string'||!d.provenance.trim()||!Array.isArray(d.addresses)||!d.addresses.length||d.addresses.length>100000)throw Error('schema')
  const a=d.addresses.map(address).sort();if(a.some((x,i)=>i>0&&x===a[i-1]))throw Error('duplicate')
  let level=a.map(x=>leaf(BigInt(d.chainId),sha256(toHex(d.datasetId)),BigInt(d.epoch),x))
  while(level.length>1){const next:typeof level=[];for(let i=0;i<level.length;i+=2)next.push(i+1<level.length?sha256(concatHex(['0x01',level[i],level[i+1]])):level[i]);level=next}
@@ -36,6 +36,8 @@ const onCron=(runtime:Runtime<Config>)=>{
  const data=JSON.parse(fetched.body) as Dataset
  if(data.chainId!==c.chainId||data.datasetId!==c.datasetId||data.epoch!==c.expectedEpoch)throw Error('version or dataset mismatch')
  const {root,count}=rootOf(data)
+ if(c.expectedCount!==undefined&&(!Number.isSafeInteger(c.expectedCount)||count!==c.expectedCount))throw Error('dataset count mismatch')
+ if(c.expectedProvenance!==undefined&&data.provenance!==c.expectedProvenance)throw Error('dataset provenance mismatch')
  if(root.toLowerCase()!==c.expectedRoot.toLowerCase())throw Error('root mismatch')
  const network=getNetwork({chainFamily:'evm',chainSelectorName:'ethereum-testnet-sepolia'});if(!network)throw Error('network')
  const client=new EVMClient(network.chainSelector.selector)

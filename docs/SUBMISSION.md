@@ -8,13 +8,13 @@
 
 **GitHub:** https://github.com/chapaevv123/listproof
 
-**Public demo:** Not verified. Local demo: `npm.cmd run serve`, then `http://127.0.0.1:4173`.
+**Public service:** https://listproof-e5sp.onrender.com/ . Confirm `/api/health` reports `productVersion: v3` and run the external smoke test before submitting V3 claims; this service uses manual Render deployment.
 
 **Video:** Not recorded or uploaded.
 
 ## Short summary (about 150 words)
 
-ListProof makes a narrow address-screening claim independently checkable: an EVM address is absent from one specified synthetic dataset at one epoch. The dataset is canonicalized into a sorted, domain-separated SHA-256 Merkle tree. A non-membership witness authenticates the nearest committed addresses and proves their ordering and adjacency. A JavaScript verifier and a Solidity Gate independently reject listed addresses, forged witnesses and stale epochs. A publisher-controlled Registry stores the current commitment on Ethereum Sepolia; its epoch-1 publication is a real mined transaction. Six read-only Gate calls, including positive and negative cases, have been captured. A Chainlink CRE workflow retrieves the pinned dataset, checks its byte hash, schema and Merkle root, reads the actual Sepolia Registry in official local simulation, and prepares an audit report. This is reproducible CRE simulation, not a live DON deployment or an on-chain CRE write. The demonstration uses only synthetic addresses and makes no legal or sanctions-compliance assertion.
+ListProof makes a narrow address-screening claim independently checkable: an EVM address is absent from one specified synthetic dataset at one epoch. A sorted, domain-separated SHA-256 Merkle tree authenticates the nearest committed neighbors and their adjacency. The public application generates and independently verifies proofs, saves browser-local cases, supports analyst notes and review status, exports receipts and reports, and rechecks imported evidence. The browser workspace is personal and editable; it is not a durable multi-user audit system. A publisher-controlled Registry holds the epoch-1 commitment on Ethereum Sepolia in a real mined transaction. Six read-only Gate scenarios have been captured. The official Chainlink CRE simulator fetches the pinned dataset, validates hash, schema, provenance, count and root, reads the real Sepolia Registry, and prepares an audit report. This is reproducible simulation, not live DON execution or an on-chain CRE write. The source contains only synthetic addresses; ListProof makes no legal or sanctions-compliance assertion.
 
 ## Technical description (about 370 words)
 
@@ -34,13 +34,13 @@ The Chainlink CRE workflow joins the off-chain source and on-chain commitment in
 
 ### Evidence and limits
 
-Epoch 1 was published on Sepolia in a real transaction. Six read-only Gate `eth_call` scenarios passed at a fixed block. The repository includes 16 Node tests, seven Foundry tests, a curated evidence summary and official CRE logs. The dataset is synthetic. A valid proof establishes absence only from this committed set; source completeness, legal status, identity linkage and future freshness remain outside the claim. The publisher remains a trust assumption.
+Epoch 1 was published on Sepolia in a real transaction. Six read-only Gate `eth_call` scenarios passed at a fixed block. The repository includes Node and Foundry tests, a curated evidence summary and official CRE logs. The V3 interface supports browser-local case review and portable evidence exports; it does not claim server-persistent case storage. The dataset is synthetic. A valid proof establishes absence only from this committed set; source completeness, legal status, identity linkage and future freshness remain outside the claim. The publisher remains a trust assumption.
 
 ## Judge walkthrough
 
 1. Read the one-sentence claim and the synthetic-data limitation in the README.
-2. Run the local demo. Verify synthetic address `0x0000000000000000000000000000000000000006`; inspect neighbors `...05` and `...09` and the local proof receipt.
-3. Try listed `...05`, stale epoch and tampered proof; each must reject.
+2. Open the public service after V3 health and smoke verification. Screen synthetic address `0x0000000000000000000000000000000000000006`; inspect neighbors `...05` and `...09` and download the local proof receipt.
+3. Save the result as a browser-local case, add a note, reverify, export a report, then import the receipt into Proof explorer. Try listed `...05`, stale epoch and tampered proof; each must reject.
 4. Open the Sepolia Registry, Gate and epoch-1 publication transaction. Inspect the curated six-case `eth_call` summary. These calls sent no transaction.
 5. Open `evidence/cre-onchain-settings.txt`. Show the matching Registry observation and the explicit `no transaction sent` status. Open `evidence/cre-onchain-stale-settings.txt` for rejection.
 6. Explain that the result concerns one synthetic committed dataset, not legal clearance.
@@ -56,7 +56,7 @@ Epoch 1 was published on Sepolia in a real transaction. Six read-only Gate `eth_
 
 ## Remaining submission fields
 
-- Public demo URL: pending hosting and external HTTP verification.
+- V3 release verification: pending manual deployment to the existing Render service and external smoke result, unless those steps have been completed and independently checked.
 - Video URL: pending genuine recording and upload.
 - Official bounty eligibility and exact cutoff time: verify in the actual DoraHacks form before submission.
 - No RYO-CHAN autonomous-agent bounty claim is made.

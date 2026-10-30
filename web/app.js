@@ -1,79 +1,217 @@
-const address = document.querySelector('#address');
-const epoch = document.querySelector('#epoch');
-const output = document.querySelector('#result');
-const verifyButton = document.querySelector('#verify');
-let lastReceipt = null;
+import {CaseStore,CASE_STATUSES} from '/cases.js';
 
-const download = document.createElement('button');
-download.textContent = 'Download proof receipt';
-download.disabled = true;
-download.style.marginLeft = '8px';
-verifyButton.after(download);
+const view=document.querySelector('#view'),toastEl=document.querySelector('#toast');
+const names={overview:'Overview',screening:'Address screening',cases:'Cases & audit trail',proof:'Proof explorer',datasets:'Datasets & commitments',registry:'On-chain registry',cre:'Chainlink CRE',api:'Developer API'};
+const state={datasets:[],evidence:null,cre:null,registry:null,registryLoading:false,screening:null,screeningError:null,screeningInput:'0x0000000000000000000000000000000000000006',screeningEpoch:1,screeningBusy:false,selectedEpoch:1,caseSearch:'',caseStatus:'All',caseSort:'newest',explorerReceipt:null,explorerResult:null,explorerError:null};
+let store=null,storageError=null;
+try{store=new CaseStore(window.localStorage);store.list();}catch(error){storageError=error.message;}
+const esc=value=>String(value??'').replace(/[&<>"']/g,x=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[x]));
+const short=value=>String(value||'').length>18?String(value).slice(0,9)+'…'+String(value).slice(-7):String(value||'');
+const fmt=iso=>iso?new Date(iso).toLocaleString():'—';
+const a=n=>'0x'+n.toString(16).padStart(40,'0');
+const badge=(label,kind='blue')=>`<span class="badge ${kind}">${esc(label)}</span>`;
+const head=(eyebrow,title,description,action='')=>`<div class="page-head"><div><span class="eyebrow">${esc(eyebrow)}</span><h1>${esc(title)}</h1><p>${esc(description)}</p></div>${action?'<div class="actions">'+action+'</div>':''}</div>`;
+const empty=(title,body,action='')=>`<div class="empty"><span class="icon-tile" style="margin:auto">◇</span><strong>${esc(title)}</strong><span>${esc(body)}</span>${action?'<div class="mt-16">'+action+'</div>':''}</div>`;
+function toast(message){toastEl.textContent=message;toastEl.classList.add('show');setTimeout(()=>toastEl.classList.remove('show'),3500);}
+function download(name,value,type='application/json'){const blob=new Blob([value],{type});const url=URL.createObjectURL(blob);const link=document.createElement('a');link.href=url;link.download=name;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
+async function api(path,body){const response=await fetch(path,{method:body?'POST':'GET',headers:body?{'content-type':'application/json'}:{},body:body?JSON.stringify(body):undefined});const data=await response.json();if(!response.ok||data.error)throw Error(data.error||'Request failed');return data;}
+const cases=()=>store?store.list():[];
+const resultName=kind=>({'not-present':'Not present in committed dataset','listed':'Listed in synthetic dataset','invalid-proof':'Proof integrity failed','stale-proof':'Stale proof rejected'}[kind]||kind);
+const resultKind=kind=>kind==='not-present'?'good':kind==='listed'?'bad':'warn';
+const storageNotice=()=>`<div class="notice warn"><strong>Personal browser workspace.</strong> Cases and notes are saved only in this browser profile. They are editable by anyone with access to it, are not synchronized, and can disappear if browser data is cleared. This is not a tamper-proof audit log.${storageError?' Storage unavailable: '+esc(storageError):''}</div>`;
+function route(){const hash=decodeURIComponent(location.hash.slice(1)||'overview');const page=hash.split('/')[0];return names[page]?{page,id:hash.split('/')[1]||null}:{page:'overview',id:null};}
+function setNav(page){document.querySelector('#breadcrumb').textContent=names[page];document.querySelectorAll('[data-route]').forEach(x=>{x.classList.toggle('active',x.dataset.route===page);x.setAttribute('aria-current',x.dataset.route===page?'page':'false')});document.querySelector('#sidebar').classList.remove('open');document.querySelector('#menu').setAttribute('aria-expanded','false');}
+function render(){const {page,id}=route();setNav(page);try{view.innerHTML=({overview:overview,screening:screening,cases:()=>casePage(id),proof:proofExplorer,datasets:datasets,registry:registry,cre:cre,api:developerApi}[page])();bind(page,id);}catch(error){view.innerHTML=head('Workspace error','Unable to open this page',error.message)+`<div class="notice bad">${esc(error.message)}</div>`;}}
 
-async function jsonRequest(path, body) {
-  const response = await fetch(path, body ? {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)} : undefined);
-  const data = await response.json();
-  if (!response.ok || data.error) throw new Error(data.error || `HTTP ${response.status}`);
-  return data;
+function overview(){
+ const all=cases(),verified=all.filter(x=>x.latestVerification?.verified).length,rejected=all.filter(x=>x.result!=='not-present').length,open=all.filter(x=>x.status!=='Closed').length;
+ const activity=all.flatMap(x=>x.events.map(e=>({...e,caseId:x.id}))).sort((a,b)=>b.at.localeCompare(a.at)).slice(0,6);
+ return head('OPERATIONS / PERSONAL WORKSPACE','Evidence you can revisit','Screen an address, preserve its proof, review the case, and verify the same evidence again.',`<a class="button" href="#screening">+ New screening</a>`)+
+ `<div class="hero-band"><div><h2>Prove the evidence. Not just the screening result.</h2><p>A valid result means absence from one committed synthetic dataset version. It is not legal clearance.</p></div><a class="button secondary" href="#proof">Inspect a proof →</a></div>`+
+ `<div class="grid four">
+ ${stat('Total screenings',all.length,'Saved as cases in this browser','▤')}
+ ${stat('Verified evidence',verified,'Latest local re-verification','◇')}
+ ${stat('Rejected results',rejected,'Listed, stale or invalid proofs','⊘')}
+ ${stat('Open cases',open,'Any status except Closed','▦')}
+ </div>`+
+ `<div class="grid two section-gap">
+ <section class="card"><div class="card-header"><h2>Commitment & network</h2>${badge('Sepolia Registry Published','good')}</div><dl class="kv"><dt>Current published epoch</dt><dd>${esc(state.evidence?.epoch??'—')}</dd><dt>Dataset versions</dt><dd>${state.datasets.length} synthetic fixtures</dd><dt>Registry connectivity</dt><dd>${state.registry?esc(state.registry.status):'Not checked in this session'} <a href="#registry">Inspect live read →</a></dd><dt>CRE evidence</dt><dd>${state.cre?.status==='verified-saved-log'?'Saved official simulation verified':'Unavailable'} <a href="#cre">Inspect workflow →</a></dd></dl></section>
+ <section class="card"><div class="card-header"><h2>Recent activity</h2><a class="small" href="#cases">All cases →</a></div>${activity.length?`<div class="timeline">${activity.map(e=>`<div class="timeline-item"><strong>${esc(e.type.replaceAll('_',' '))}</strong><p><a href="#cases/${encodeURIComponent(e.caseId)}">${esc(e.caseId)}</a> · ${esc(e.detail)}</p><time>${esc(fmt(e.at))}</time></div>`).join('')}</div>`:empty('No screenings yet','Start with a synthetic address. Your saved cases will appear here.','<a class="button small" href="#screening">Create screening</a>')}</section>
+ </div><div class="grid three section-gap">${quick('Address screening','Generate and independently verify a real Merkle neighbor proof','#screening','⌕')}${quick('Datasets & commitments','Compare synthetic epochs and inspect the published root','#datasets','▥')}${quick('Chainlink CRE','See the official simulation and its real Registry read','#cre','✳')}</div><div class="section-gap">${storageNotice()}</div>`;
 }
-async function refresh() {
-  const states = await jsonRequest('/api/state');
-  const state = states.find(item => item.epoch === Number(epoch.value));
-  if (!state) throw new Error('Dataset epoch unavailable');
-  document.querySelector('#epochValue').textContent = `Epoch ${state.epoch}`;
-  document.querySelector('#root').textContent = state.root;
-  const dataset = await jsonRequest(`/dataset/${state.epoch}`);
-  document.querySelector('#datasetAddresses').textContent = dataset.addresses.map((item,index) => `${index}  ${item}`).join('\n');
+const stat=(label,value,caption,icon)=>`<div class="card compact"><div class="icon-tile">${icon}</div><div class="stat-value">${esc(value)}</div><div class="stat-label">${esc(label)}</div><div class="stat-caption">${esc(caption)}</div></div>`;
+const quick=(title,description,target,icon)=>`<a href="${target}" class="card" style="display:block;color:inherit"><div class="icon-tile">${icon}</div><h2 class="mt-16">${esc(title)} ↗</h2><p class="small mb-0">${esc(description)}</p></a>`;
+
+function screening(){
+ const options=state.datasets.map(d=>`<option value="${d.epoch}" ${state.screeningEpoch===d.epoch?'selected':''}>Epoch ${d.epoch} · ${d.registryPublished?'published':'local fixture'}</option>`).join('');
+ const dataset=state.datasets.find(x=>x.epoch===state.screeningEpoch)||state.datasets[0];
+ return head('SCREENING / NEW','Address screening','Generate a Merkle non-membership witness and check it with the independent local verifier. The source is synthetic; no legal decision is made.')+
+ `<div class="grid two"><section class="card"><div class="card-header"><h2>New screening</h2>${badge('SYNTHETIC DATASET')}</div>
+ <form id="screen-form"><div class="field"><label for="screen-address">EVM address</label><input id="screen-address" class="mono" required spellcheck="false" autocomplete="off" value="${esc(state.screeningInput)}" placeholder="0x…"><span class="field-help">Exactly 0x followed by 40 hexadecimal characters. Mixed case is normalized.</span></div>
+ <div class="grid two"><div class="field"><label for="screen-dataset">Dataset</label><select id="screen-dataset"><option>ListProof synthetic demo</option></select></div><div class="field"><label for="screen-epoch">Epoch</label><select id="screen-epoch">${options}</select></div></div>
+ <button class="button" type="submit" ${state.screeningBusy?'disabled':''}>${state.screeningBusy?'Checking proof…':'Generate & verify proof →'}</button><span class="field-error" id="screen-error" role="alert"></span></form>
+ <hr class="divider"><h3>Examples & test scenarios</h3><p class="small">These reproduce known behavior; they are not real sanctions checks.</p><div class="button-row"><button class="button ghost small" data-scenario="clean">Absent · …06</button><button class="button ghost small" data-scenario="listed">Listed · …05</button><button class="button ghost small" data-scenario="stale">Stale epoch</button><button class="button ghost small" data-scenario="tampered">Tampered proof</button></div></section>
+ <aside class="card"><div class="card-header"><h2>Selected commitment</h2>${badge(dataset?.registryPublished?'Published on Sepolia':'Local fixture',dataset?.registryPublished?'good':'warn')}</div><dl class="kv"><dt>Dataset ID</dt><dd>${esc(dataset?.datasetId)}</dd><dt>Epoch</dt><dd>${esc(dataset?.epoch)}</dd><dt>Chain</dt><dd>Ethereum Sepolia · 11155111</dd><dt>Address count</dt><dd>${esc(dataset?.count)}</dd><dt>Merkle root</dt><dd class="hash">${esc(dataset?.root)}</dd><dt>Content hash</dt><dd class="hash">${esc(dataset?.contentHash)}</dd></dl><hr class="divider"><div class="notice">The proof checks absence in this version only. Dataset accuracy and completeness remain publisher responsibilities.</div></aside></div>
+ <section class="card section-gap" id="screen-result"><div class="card-header"><h2>Screening result</h2></div>${state.screeningBusy?'<div class="loading-view" style="min-height:140px">Generating and verifying witness…</div>':state.screeningError?`<div class="notice bad" role="alert">${esc(state.screeningError)}</div>`:state.screening?screeningResult(state.screening):empty('No result yet','Enter an address above or select an example to begin.')}</section>`;
 }
-async function run(mode = 'manual') {
-  if (mode === 'listed') address.value = '0x0000000000000000000000000000000000000005';
-  else if (mode !== 'manual') address.value = '0x0000000000000000000000000000000000000006';
-  if (mode === 'stale') epoch.value = '1';
-  lastReceipt = null; download.disabled = true; verifyButton.disabled = true;
-  output.textContent = 'Generating proof and checking commitment…';
-  try {
-    await refresh();
-    const generated = await jsonRequest('/api/proof', {address:address.value, epoch:Number(epoch.value), mode});
-    if (generated.status === 'listed') {output.textContent = 'REJECTED · Address is present in the committed synthetic dataset.'; return;}
-    const independently = await jsonRequest('/api/verify', {proof:generated.proof,againstEpoch:generated.checkedAgainst.epoch});
-    if (independently.verified !== (generated.status === 'verified')) throw new Error('Verifier disagreement');
-    lastReceipt = {...generated.receipt,independentVerification:independently};
-    download.disabled = false;
-    output.textContent = `${independently.verified ? 'VERIFIED' : 'REJECTED'} · ${independently.verified ? 'Address absent from this committed dataset.' : 'Proof failed against the selected commitment.'}\n\n${JSON.stringify(lastReceipt,null,2)}`;
-  } catch (error) {
-    output.textContent = `ERROR · ${error.message}`;
-  } finally {
-    verifyButton.disabled = false;
+function screeningResult(s){
+ const type=resultKind(s.result),title=resultName(s.result),symbol=type==='good'?'✓':type==='bad'?'×':'!';
+ const explanation=s.result==='not-present'?'The target falls strictly between authenticated adjacent addresses, or outside a verified boundary, for this exact epoch.':s.result==='listed'?'This address is present in the selected synthetic dataset. No non-membership witness exists.':s.result==='stale-proof'?'The witness belongs to an earlier epoch and fails against the selected newer commitment.':'The altered witness fails independent verification.';
+ const proof=s.generated?.proof;
+ return `<div class="result-banner ${type}"><div class="result-symbol">${symbol}</div><div><strong>${esc(title)}</strong><p>${esc(explanation)}</p></div></div>
+ <div class="grid two section-gap"><dl class="kv"><dt>Normalized target</dt><dd class="hash">${esc(s.address)}</dd><dt>Dataset epoch</dt><dd>${esc(s.epoch)}</dd><dt>Against epoch</dt><dd>${esc(s.verification?.epoch??s.epoch)}</dd><dt>Independent verifier</dt><dd>${s.verification?.verified?'PASS':'REJECTED / not applicable'}</dd></dl><dl class="kv"><dt>Commitment root</dt><dd class="hash">${esc(s.root)}</dd><dt>Left neighbor</dt><dd class="hash">${esc(proof?.left?.address||'Boundary / none')}</dd><dt>Right neighbor</dt><dd class="hash">${esc(proof?.right?.address||'Boundary / none')}</dd><dt>Proof source</dt><dd>Local Node proof engine</dd></dl></div>
+ <hr class="divider"><div class="button-row">${s.receipt?'<button class="button secondary" id="download-receipt">Download JSON receipt</button><button class="button ghost" id="inspect-proof">Inspect proof</button>':''}<button class="button" id="save-case" ${storageError?'disabled':''}>Save as case</button></div><p class="small subtle mt-16 mb-0">A saved case is local to this browser. Saving evidence does not approve a transaction.</p>`;
+}
+async function runScreen(mode='clean'){
+ const input=document.querySelector('#screen-address'),selector=document.querySelector('#screen-epoch');
+ const address=input?.value.trim()||state.screeningInput,epoch=Number(selector?.value||state.screeningEpoch);
+ state.screeningInput=address;state.screeningEpoch=epoch;
+ if(!/^0x[0-9a-fA-F]{40}$/.test(address)){document.querySelector('#screen-error').textContent='Enter a full 20-byte EVM address.';input?.focus();return;}
+ state.screeningBusy=true;state.screening=null;state.screeningError=null;render();
+ try{
+  const generated=await api('/api/v1/screenings',{address,epoch,mode}),normalized=address.toLowerCase(),dataset=state.datasets.find(x=>x.epoch===epoch);
+  let verification=null,result;
+  if(generated.status==='listed')result='listed';
+  else{
+   const checked=await api('/api/v1/verify',{proof:generated.proof,againstEpoch:generated.checkedAgainst.epoch});
+   if(checked.verified!==(generated.status==='verified'))throw Error('Proof generator and independent verifier disagree');
+   verification={verified:checked.verified,epoch:checked.commitment.epoch,root:checked.commitment.root,at:new Date().toISOString(),method:'independent-local-verifier'};
+   result=checked.verified?'not-present':mode==='stale'?'stale-proof':'invalid-proof';
+   generated.receipt.independentVerification=checked;
   }
+  state.screening={address:normalized,epoch,root:dataset.root,datasetId:dataset.datasetId,result,receipt:generated.receipt||null,generated,verification};
+ }catch(error){state.screening=null;state.screeningError='Screening failed: '+error.message;toast(state.screeningError);}
+ finally{state.screeningBusy=false;render();}
 }
-download.onclick = () => {
-  if (!lastReceipt) return;
-  const blob = new Blob([JSON.stringify(lastReceipt,null,2)],{type:'application/json'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a'); a.href = url; a.download = `listproof-epoch-${lastReceipt.commitment.epoch}-receipt.json`; a.click();
-  setTimeout(() => URL.revokeObjectURL(url),1000);
-};
-epoch.onchange = () => refresh().catch(error => {output.textContent = `ERROR · ${error.message}`;});
-verifyButton.onclick = () => run('manual');
-document.querySelectorAll('[data-mode]').forEach(button => button.onclick = () => run(button.dataset.mode));
-refresh().catch(error => {output.textContent = `ERROR · ${error.message}`;});
-async function showSepoliaEvidence() {
-  const target=document.querySelector('#sepoliaEvidence');
-  try {
-    const evidence=await jsonRequest('/api/sepolia');
-    target.replaceChildren();
-    const line=value=>{const div=document.createElement('div');div.textContent=value;target.append(div);};
-    const link=(label,url)=>{const a=document.createElement('a');a.textContent=label;a.href=url;a.target='_blank';a.rel='noopener noreferrer';a.style.color='#9af0bd';target.append(a,document.createElement('br'));};
-    line(`Synthetic dataset · epoch ${evidence.epoch} · ${evidence.count} addresses`);
-    line(`Committed root: ${evidence.root}`);
-    link(`Registry ${evidence.registry.address}`,evidence.registry.explorer);
-    link(`Gate ${evidence.gate.address}`,evidence.gate.explorer);
-    link(`RootUpdated transaction · block ${evidence.rootPublication.blockNumber}`,evidence.rootPublication.explorerTx);
-    if(evidence.proofCheck.status==='verified-read-only'){
-      line(`Gate eth_call checks at Sepolia block ${evidence.proofCheck.blockNumber} (no transaction):`);
-      for(const result of evidence.proofCheck.results)line(`${result.passed?'PASS':'FAIL'} · ${result.name} · ${result.expected}`);
-    }else line('Gate eth_call proof checks: pending; no on-chain proof result claimed.');
-    line('CRE: official local simulation read the Sepolia Registry; no receiver update on-chain.');
-  }catch(error){target.textContent=`Sepolia evidence unavailable: ${error.message}`;}
+
+function casePage(id){return id?caseDetail(id):caseList();}
+function caseList(){
+ const all=cases();let filtered=all.filter(x=>(state.caseStatus==='All'||x.status===state.caseStatus)&&(!state.caseSearch||[x.id,x.address,x.result,x.status].some(v=>String(v).toLowerCase().includes(state.caseSearch.toLowerCase()))));
+ filtered.sort((a,b)=>state.caseSort==='oldest'?a.createdAt.localeCompare(b.createdAt):state.caseSort==='status'?a.status.localeCompare(b.status):b.createdAt.localeCompare(a.createdAt));
+ return head('WORKSPACE / AUDIT','Cases & audit trail','Review saved screenings, analyst notes, status changes and evidence re-verification.',`<a class="button" href="#screening">+ New screening</a>`)+storageNotice()+
+ `<div class="card section-gap"><form id="case-filter" class="grid three"><div class="field"><label for="case-search">Search</label><input id="case-search" value="${esc(state.caseSearch)}" placeholder="Case ID or address"></div><div class="field"><label for="case-status">Status</label><select id="case-status"><option>All</option>${CASE_STATUSES.map(x=>`<option ${state.caseStatus===x?'selected':''}>${esc(x)}</option>`).join('')}</select></div><div class="field"><label for="case-sort">Sort</label><select id="case-sort"><option value="newest" ${state.caseSort==='newest'?'selected':''}>Newest first</option><option value="oldest" ${state.caseSort==='oldest'?'selected':''}>Oldest first</option><option value="status" ${state.caseSort==='status'?'selected':''}>Status</option></select></div><button class="button secondary small" type="submit">Apply filters</button></form></div>
+ <section class="card section-gap"><div class="card-header"><h2>Saved cases</h2>${badge(filtered.length+' shown')}</div>${filtered.length?`<div class="table-wrap"><table class="table"><thead><tr><th>Case</th><th>Address</th><th>Result</th><th>Status</th><th>Created</th><th></th></tr></thead><tbody>${filtered.map(x=>`<tr><td><strong>${esc(x.id)}</strong></td><td class="mono">${esc(short(x.address))}</td><td>${badge(resultName(x.result),resultKind(x.result))}</td><td>${esc(x.status)}</td><td>${esc(fmt(x.createdAt))}</td><td><a href="#cases/${encodeURIComponent(x.id)}">Open →</a></td></tr>`).join('')}</tbody></table></div>`:empty('No matching cases',all.length?'Change the filters to find a saved case.':'Save a screening to create your first case.','<a class="button small" href="#screening">Start screening</a>')}</section>`;
 }
-showSepoliaEvidence();
+function caseDetail(id){
+ const item=store?.get(id);
+ if(!item)return head('WORKSPACE / CASE','Case not found','This browser profile does not contain that case.')+empty('No case at this ID','Cases are stored only in the browser where they were created.','<a class="button small" href="#cases">Back to cases</a>');
+ const kind=resultKind(item.result),receipt=item.receipt;
+ return head('CASES / '+item.id,item.id,'Created '+fmt(item.createdAt)+' · stored in this browser',`<a class="button secondary" href="#cases">← All cases</a>`)+storageNotice()+
+ `<div class="grid two section-gap"><section class="card"><div class="card-header"><h2>Screening evidence</h2>${badge(resultName(item.result),kind)}</div><dl class="kv"><dt>Address</dt><dd class="hash">${esc(item.address)}</dd><dt>Dataset</dt><dd>${esc(item.datasetId)} · synthetic</dd><dt>Epoch / chain</dt><dd>${esc(item.epoch)} / ${esc(item.chainId)}</dd><dt>Committed root</dt><dd class="hash">${esc(item.root)}</dd><dt>Original verification</dt><dd>${item.initialVerification?.verified?'Verified against fixture':item.receipt?'Rejected against fixture':'No non-membership receipt'}</dd><dt>Latest re-verification</dt><dd>${item.latestVerification?.at?esc(fmt(item.latestVerification.at))+' · '+(item.latestVerification.verified?'verified':'rejected'):'Not rerun'}</dd></dl><hr class="divider"><div class="button-row">${receipt?'<button class="button secondary small" id="case-receipt">Download receipt</button><button class="button ghost small" id="case-reverify">Reverify stored proof</button><button class="button ghost small" id="case-inspect">Inspect proof</button>':'<span class="small subtle">Listed addresses have no non-membership receipt.</span>'}</div></section>
+ <section class="card"><div class="card-header"><h2>Case management</h2>${badge(item.status)}</div><div class="field"><label for="case-change-status">Status</label><select id="case-change-status">${CASE_STATUSES.map(x=>`<option ${item.status===x?'selected':''}>${esc(x)}</option>`).join('')}</select><span class="field-help">Evidence Verified means the proof checked against a commitment. It does not approve a transaction.</span></div><button class="button secondary small" id="case-save-status">Save status</button><hr class="divider"><form id="note-form"><div class="field"><label for="case-note">Analyst note</label><textarea id="case-note" maxlength="2000" placeholder="Add context or follow-up work. Notes stay in this browser."></textarea></div><button class="button secondary small" type="submit">Add note</button></form></section></div>
+ <div class="grid two section-gap"><section class="card"><div class="card-header"><h2>Audit events</h2>${badge(item.events.length+' events')}</div><div class="timeline">${item.events.map(e=>`<div class="timeline-item"><strong>${esc(e.type.replaceAll('_',' '))}</strong><p>${esc(e.detail)}</p><time>${esc(fmt(e.at))}</time></div>`).join('')}</div><p class="small subtle mb-0">Browser-local history is editable by the device owner; it is not tamper-proof.</p></section>
+ <section class="card"><div class="card-header"><h2>Notes & export</h2></div>${item.notes.length?item.notes.map(n=>`<div class="notice mb-12"><strong>${esc(fmt(n.at))}</strong><p class="mb-0">${esc(n.text)}</p></div>`).join(''):empty('No analyst notes','Add a note above to record your review.') }<hr class="divider"><div class="button-row"><button class="button secondary small" id="case-report">Download human report</button><button class="button ghost small" id="case-bundle">Download evidence bundle</button></div></section></div>`;
+}
+function reportForCase(item){
+ const lines=['# ListProof case report','', 'Case ID: '+item.id,'Created: '+item.createdAt,'Last updated: '+item.updatedAt,'Status: '+item.status,'', '## Screening','Address: '+item.address,'Result: '+resultName(item.result),'Dataset: '+item.datasetId+' ('+item.datasetClassification+')','Chain ID: '+item.chainId,'Epoch: '+item.epoch,'Merkle root: '+item.root,'Original verification: '+(item.initialVerification?.verified?'verified':'not verified / no proof'),'Latest verification: '+(item.latestVerification?.verified?'verified':'not verified / no proof'),'','## Evidence provenance','Registry: '+state.evidence.registry.explorer,'Publication: '+state.evidence.rootPublication.explorerTx,'CRE: official local simulation with Sepolia Registry read; no live DON write.','', '## Analyst notes',...item.notes.map(n=>n.at+' — '+n.text),'','## Limits','Absence is proven only for the committed synthetic dataset version. This is not legal clearance, sanctions compliance, or a transaction approval.','This case and its audit events are stored in a browser profile and are not tamper-proof.'];return lines.join('\n');
+}
+async function reverifyCase(item){
+ if(!item.receipt?.proof){toast('This case has no non-membership proof to verify.');return;}
+ try{const response=await api('/api/v1/verify',{proof:item.receipt.proof,againstEpoch:item.epoch});const trusted=state.datasets.find(x=>x.epoch===item.epoch);const commitment=item.receipt.commitment;const bindings=trusted&&commitment?.root===trusted.root&&commitment?.epoch===trusted.epoch&&commitment?.datasetId===trusted.datasetId&&commitment?.chainId===trusted.chainId&&commitment?.count===trusted.count&&commitment?.contentHash===trusted.contentHash&&item.datasetId===trusted.datasetId&&item.root===trusted.root;const verified=Boolean(response.verified&&bindings&&response.commitment.root===item.root&&item.receipt.proof.root===item.root);store.reverification(item.id,{verified,epoch:item.epoch,root:response.commitment.root,method:'independent-local-verifier'});toast(verified?'Stored proof verified against its epoch fixture.':'Stored proof or receipt binding rejected.');render();}catch(error){toast('Reverification failed: '+error.message);}
+}
+
+function proofExplorer(){
+ const receipt=state.explorerReceipt,proof=receipt?.proof,check=state.explorerResult;
+ return head('EVIDENCE / INSPECT','Proof explorer','Paste or upload a ListProof receipt. The server checks its witness against a trusted synthetic fixture, independently of the receipt’s own verdict.')+
+ `<div class="grid two"><section class="card"><div class="card-header"><h2>Load a receipt</h2>${badge('JSON · 256 KB max')}</div><div class="field"><label for="receipt-text">Receipt JSON</label><textarea id="receipt-text" class="mono" style="min-height:190px" placeholder='Paste a downloaded listproof-local-proof-v1 receipt'>${esc(receipt?JSON.stringify(receipt,null,2):'')}</textarea></div><div class="button-row"><button class="button" id="verify-receipt">Verify receipt</button><label class="button secondary" for="receipt-file" style="cursor:pointer">Upload JSON file</label><input id="receipt-file" type="file" accept=".json,application/json" hidden><button class="button ghost" id="clear-receipt">Clear</button></div>${state.explorerError?`<div class="notice bad mt-16" role="alert">${esc(state.explorerError)}</div>`:''}</section>
+ <section class="card"><div class="card-header"><h2>Verification result</h2></div>${check?`<div class="result-banner ${check.verified?'':'bad'}"><div class="result-symbol">${check.verified?'✓':'×'}</div><div><strong>${check.verified?'Proof verified':'Proof rejected'}</strong><p>${esc(check.reason)}</p></div></div><dl class="kv mt-16"><dt>Checked at</dt><dd>${esc(fmt(check.checkedAt))}</dd><dt>Trusted epoch</dt><dd>${esc(check.epoch)}</dd><dt>Trusted root</dt><dd class="hash">${esc(check.root)}</dd><dt>Method</dt><dd>Independent local verifier</dd></dl><button class="button secondary small mt-16" id="download-verification">Download verification result</button>`:empty('Awaiting evidence','Load a receipt to inspect its commitment and neighbor witness.')}</section></div>
+ ${proof?`<div class="grid two section-gap"><section class="card"><div class="card-header"><h2>Commitment & leaf</h2>${badge('SHA-256 DOMAIN SEPARATED')}</div><dl class="kv"><dt>Target</dt><dd class="hash">${esc(proof.target)}</dd><dt>Dataset ID</dt><dd>${esc(proof.context?.datasetId)}</dd><dt>Dataset key</dt><dd class="hash">${esc(proof.context?.datasetKey)}</dd><dt>Chain ID</dt><dd>${esc(proof.context?.chainId)}</dd><dt>Epoch</dt><dd>${esc(proof.context?.epoch)}</dd><dt>Root</dt><dd class="hash">${esc(proof.root)}</dd><dt>Leaf count</dt><dd>${esc(proof.count)}</dd></dl><div class="code-block mt-16">leaf = SHA256(0x00 || uint256(chainId) || datasetKey || uint256(epoch) || address20)</div></section>
+ <section class="card"><div class="card-header"><h2>Neighbor witness</h2></div>${neighbor('Predecessor',proof.left)}${neighbor('Successor',proof.right)}<div class="notice mt-16">Interior proofs require two authenticated adjacent indices and strict address ordering. Boundaries authenticate the first or last element.</div></section></div>`:''}`;
+}
+function neighbor(title,member){return `<div class="mb-12"><h3>${esc(title)} ${member?badge('INDEX '+member.index):badge('BOUNDARY','warn')}</h3>${member?`<div class="hash">${esc(member.address)}</div><p class="small mt-16">Sibling hashes: ${member.siblings?.length||0}</p><div class="code-block">${(member.siblings||[]).map(esc).join('\n')||'No siblings at this level'}</div>`:'<p class="small">No member on this side.</p>'}</div>`;}
+async function verifyExplorer(raw){
+ try{
+  if(raw.length>262144)throw Error('Receipt exceeds 256 KB');
+  const input=JSON.parse(raw),receipt=input.schema==='listproof-case-bundle-v1'?input.case?.receipt:input;
+  if(receipt.kind!=='listproof-local-proof-v1'||!receipt.proof)throw Error('Expected a ListProof non-membership receipt');
+  state.explorerReceipt=receipt;state.explorerError=null;
+  const proof=receipt.proof,epoch=proof.context?.epoch,dataset=state.datasets.find(x=>x.epoch===epoch);
+  if(!dataset)throw Error('This demo has no trusted commitment for that epoch');
+  const response=await api('/api/v1/verify',{proof,againstEpoch:epoch});
+  const bindings=receipt.commitment?.root===dataset.root&&receipt.commitment?.epoch===epoch&&receipt.commitment?.datasetId===dataset.datasetId&&receipt.commitment?.chainId===dataset.chainId&&receipt.commitment?.contentHash===dataset.contentHash&&receipt.commitment?.count===dataset.count&&proof.root===dataset.root&&proof.count===dataset.count;
+  const verified=Boolean(response.verified&&bindings);
+  state.explorerResult={verified,checkedAt:new Date().toISOString(),epoch,root:dataset.root,target:proof.target,reason:verified?'Both authenticated neighbors and all commitment bindings passed. This proves absence only from this synthetic dataset version.':'Witness verification or receipt-to-commitment binding failed. The receipt’s own claimed verdict was ignored.',checks:{independentVerifier:response.verified,receiptBindings:bindings}};
+ }catch(error){state.explorerError=error.message;state.explorerResult=null;}
+ render();
+}
+function datasets(){
+ const selected=state.datasets.find(x=>x.epoch===state.selectedEpoch)||state.datasets[0];
+ return head('EVIDENCE / VERSIONS','Datasets & commitments','Inspect the exact synthetic addresses, provenance and Merkle commitments. Epoch 2 is a local fixture; only epoch 1 is published on Sepolia.')+
+ `<div class="grid three">${state.datasets.map(d=>`<button class="card" data-dataset="${d.epoch}" style="text-align:left;border-color:${d.epoch===selected.epoch?'#92aaf1':'#e2e8f0'}"><div class="card-header"><h2>Epoch ${d.epoch}</h2>${badge(d.registryPublished?'PUBLISHED':'LOCAL ONLY',d.registryPublished?'good':'warn')}</div><div class="stat-value">${d.count}</div><div class="stat-label">synthetic addresses</div><p class="small hash mt-16 mb-0">${esc(short(d.root))}</p></button>`).join('')}</div>
+ <div class="grid two section-gap"><section class="card"><div class="card-header"><h2>Epoch ${esc(selected.epoch)} commitment</h2>${badge(selected.registryPublished?'Sepolia Registry Published':'Not published',selected.registryPublished?'good':'warn')}</div><dl class="kv"><dt>Dataset</dt><dd>${esc(selected.datasetId)}</dd><dt>Classification</dt><dd>Synthetic demonstration data</dd><dt>Chain ID</dt><dd>${esc(selected.chainId)}</dd><dt>Count</dt><dd>${esc(selected.count)}</dd><dt>Root</dt><dd class="hash">${esc(selected.root)}</dd><dt>Content hash</dt><dd class="hash">${esc(selected.contentHash)}</dd><dt>Dataset key</dt><dd class="hash">${esc(selected.datasetKey)}</dd><dt>Provenance</dt><dd>${esc(selected.provenance)}</dd><dt>Publication</dt><dd>${selected.registryPublished?`<a href="${esc(state.evidence.rootPublication.explorerTx)}" target="_blank" rel="noopener noreferrer">Sepolia transaction ↗</a>`:'No publication transaction'}</dd></dl></section>
+ <section class="card"><div class="card-header"><h2>Canonical address order</h2>${badge(selected.count+' LEAVES')}</div><div class="table-wrap"><table class="table"><thead><tr><th>Index</th><th>Address</th></tr></thead><tbody>${selected.addresses.map((x,i)=>`<tr><td>${i}</td><td class="hash">${esc(x)}</td></tr>`).join('')}</tbody></table></div><div class="notice mt-16">No production sanctions dataset is loaded. Publishing a new root is a separate privileged action outside this public application.</div></section></div>`;
+}
+function registry(){
+ const e=state.evidence,r=state.registry;
+ return head('ON-CHAIN / ETHEREUM SEPOLIA','Registry explorer','Compare the saved epoch-1 transaction and Gate read evidence with a fresh, read-only Registry RPC observation.',`<button class="button secondary" id="refresh-registry" ${state.registryLoading?'disabled':''}>${state.registryLoading?'Reading Sepolia…':'Refresh live read'}</button>`)+
+ `<div class="grid two"><section class="card"><div class="card-header"><h2>Published commitment</h2>${badge('ONCHAIN_TRANSACTION','good')}</div><dl class="kv"><dt>Network</dt><dd>Ethereum Sepolia · 11155111</dd><dt>Registry</dt><dd class="hash"><a href="${esc(e.registry.explorer)}" target="_blank" rel="noopener noreferrer">${esc(e.registry.address)} ↗</a></dd><dt>Gate</dt><dd class="hash"><a href="${esc(e.gate.explorer)}" target="_blank" rel="noopener noreferrer">${esc(e.gate.address)} ↗</a></dd><dt>Dataset ID</dt><dd class="hash">${esc(e.datasetId)}</dd><dt>Epoch</dt><dd>${esc(e.epoch)}</dd><dt>Root</dt><dd class="hash">${esc(e.root)}</dd><dt>Count</dt><dd>${esc(e.count)}</dd><dt>Publication block</dt><dd>${esc(e.rootPublication.blockNumber)}</dd><dt>Transaction</dt><dd><a href="${esc(e.rootPublication.explorerTx)}" target="_blank" rel="noopener noreferrer">${esc(short(e.rootPublication.transactionHash))} ↗</a></dd></dl></section>
+ <section class="card"><div class="card-header"><h2>Fresh Registry read</h2>${badge(r?.status==='online'?'ONCHAIN_READ':r?.status==='unavailable'?'RPC UNAVAILABLE':'NOT CHECKED',r?.status==='online'?'good':'warn')}</div>${r?.status==='online'?`<div class="notice ${r.matchesSavedEpochOne?'good':'warn'}">${r.matchesSavedEpochOne?'Live Registry state matches the saved epoch-1 commitment.':'Live Registry state differs from the saved epoch-1 snapshot. Inspect before relying on old evidence.'}</div><dl class="kv mt-16"><dt>Read at</dt><dd>${esc(fmt(r.checkedAt))}</dd><dt>Block</dt><dd>${esc(r.blockNumber)}</dd><dt>Epoch</dt><dd>${esc(r.epoch)}</dd><dt>Root</dt><dd class="hash">${esc(r.root)}</dd><dt>Count</dt><dd>${esc(r.count)}</dd><dt>Method</dt><dd>Read-only eth_call at one block</dd></dl>`:r?.status==='unavailable'?`<div class="notice warn">Live RPC unavailable: ${esc(r.reason)}. Saved publication and Gate evidence remain available below. No live state claim is made.</div>`:empty('Live read not requested','Use Refresh live read to query Sepolia without signing or gas.')}</section></div>
+ <section class="card section-gap"><div class="card-header"><h2>Saved Gate proof calls</h2>${badge('ONCHAIN_READ · NO TRANSACTION','blue')}</div><p class="small">Six <code>eth_call</code> scenarios were captured at Sepolia block ${esc(e.proofCheck.blockNumber)}. These are separate from the local proof buttons.</p><div class="table-wrap"><table class="table"><thead><tr><th>Scenario</th><th>Expected</th><th>Result</th></tr></thead><tbody>${e.proofCheck.results.map(x=>`<tr><td>${esc(x.name)}</td><td>${esc(x.expected)}</td><td>${badge(x.passed?'PASS':'FAIL',x.passed?'good':'bad')}</td></tr>`).join('')}</tbody></table></div></section>`;
+}
+async function refreshRegistry(force=false){if(state.registryLoading)return;if(!force&&state.registry)return;state.registryLoading=true;render();try{state.registry=await api('/api/v1/registry/status');}catch(error){state.registry={status:'unavailable',reason:error.message,checkedAt:new Date().toISOString()};}finally{state.registryLoading=false;render();}}
+
+function cre(){
+ const c=state.cre,base='https://github.com/chapaevv123/listproof/blob/master/';
+ return head('AUTOMATION / EVIDENCE','Chainlink CRE Integration','The official CRE workflow audits the pinned synthetic dataset against the published Sepolia Registry state. Saved CLI simulation evidence is shown below, with its limits.')+
+ `<div class="hero-band"><div><h2>CRE Simulation Verified</h2><p>Dataset fetch → deterministic checks → finalized Registry read → simulated signed audit report.</p></div><a class="button secondary" href="/evidence/cre-v3-onchain-settings.txt" target="_blank" rel="noopener noreferrer">Open CLI log ↗</a></div>
+ <div class="card"><div class="card-header"><h2>Workflow stages</h2>${badge('OFFICIAL_CRE_SIMULATION','blue')}</div><div class="flow"><span class="flow-item">Cron trigger</span><span class="flow-arrow">→</span><span class="flow-item">HTTP dataset fetch</span><span class="flow-arrow">→</span><span class="flow-item">Content hash & schema</span><span class="flow-arrow">→</span><span class="flow-item">Merkle root</span><span class="flow-arrow">→</span><span class="flow-item">Sepolia Registry read</span><span class="flow-arrow">→</span><span class="flow-item">Audit report</span></div><div class="grid three mt-24"><div><h3>1. Pin source bytes</h3><p class="small">The HTTP capability fetches the synthetic dataset. The workflow checks SHA-256 against the configured hash, then validates version, addresses and schema.</p></div><div><h3>2. Recompute commitment</h3><p class="small">CRE sorts normalized addresses, builds the domain-separated tree, and compares its root with the configured expected root.</p></div><div><h3>3. Audit on-chain state</h3><p class="small">The audit configuration reads the real Sepolia Registry epoch, root, dataset ID, content hash and count, rejecting mismatches.</p></div></div></div>
+ <div class="grid two section-gap"><section class="card"><div class="card-header"><h2>Saved execution evidence</h2>${badge(c?.status==='verified-saved-log'?'SAVED LOG CONSISTENCY CHECK':'UNAVAILABLE',c?.status==='verified-saved-log'?'good':'warn')}</div>${c?`<dl class="kv"><dt>Evidence class</dt><dd>${esc(c.class)}</dd><dt>Observed Sepolia header</dt><dd>${esc(c.observedSepoliaBlock)}</dd><dt>Registry observation</dt><dd>${esc(c.registryObservation)}</dd><dt>Audit output</dt><dd>${esc(c.publishStatus)}</dd><dt>Log SHA-256</dt><dd class="hash">${esc(c.logSha256)}</dd><dt>Live DON</dt><dd>No verified deployment</dd><dt>On-chain CRE write</dt><dd>None verified</dd></dl>`:'<div class="notice warn">Saved CRE audit metadata unavailable. Open the source log and inspect it directly.</div>'}</section>
+ <section class="card"><div class="card-header"><h2>Negative-case coverage</h2></div><div class="steps">${[['On-chain stale epoch','cre-onchain-stale-settings.txt'],['Bad content hash','cre-bad-hash-settings.txt'],['Bad Merkle root','cre-bad-root-settings.txt'],['Stale configuration','cre-stale-settings.txt'],['Invalid schema','cre-invalid-schema-settings.txt'],['Unavailable source','cre-unavailable-settings.txt']].map((x,i)=>`<div class="step"><span class="step-num">${i+1}</span><div><strong>${esc(x[0])}</strong><p><a href="${base+'evidence/'+x[1]}" target="_blank" rel="noopener noreferrer">Saved official CLI output ↗</a></p></div></div>`).join('')}</div></section></div>
+ <div class="notice warn section-gap"><strong>What this means:</strong> the official local CRE simulator performed the audit and read real Sepolia state. The saved log is not proof of live DON consensus or an on-chain receiver write. The receiver contract is prepared but not deployed.</div>
+ <div class="button-row mt-16"><a class="button secondary" href="${base}cre/listproof/main.ts" target="_blank" rel="noopener noreferrer">Workflow source ↗</a><a class="button ghost" href="${base}docs/CRE-RUNBOOK.md" target="_blank" rel="noopener noreferrer">Reproduce simulation ↗</a></div>`;
+}
+function developerApi(){
+ const endpoints=[['GET','/api/health','Readiness and storage mode'],['GET','/api/v1/datasets','Synthetic versions and commitments'],['POST','/api/v1/screenings','Generate a non-membership witness'],['POST','/api/v1/verify','Independently verify a witness'],['GET','/api/v1/registry/status','Fresh read-only Sepolia state; may be unavailable'],['GET','/api/v1/cre/evidence','Parsed saved official CRE audit metadata'],['GET','/api/sepolia','Curated publication and Gate read evidence']];
+ return head('BUILD / INTEGRATE','Developer API','A small read-only and stateless screening API. No public case-write or privileged deployment endpoint is exposed.')+
+ `<div class="grid two"><section class="card"><div class="card-header"><h2>Endpoints</h2>${badge('V1 + LEGACY','blue')}</div><div class="table-wrap"><table class="table"><thead><tr><th>Method</th><th>Path</th><th>Use</th></tr></thead><tbody>${endpoints.map(x=>`<tr><td class="mono">${x[0]}</td><td class="mono">${x[1]}</td><td>${x[2]}</td></tr>`).join('')}</tbody></table></div></section><section class="card"><div class="card-header"><h2>Screening request</h2></div><div class="code-block">POST /api/v1/screenings
+Content-Type: application/json
+
+{"address":"0x0000000000000000000000000000000000000006","epoch":1,"mode":"clean"}</div><p class="small mt-16">Use the returned <code>proof</code> as input to <code>POST /api/v1/verify</code> with <code>againstEpoch: 1</code>. The response reports fixture-bound local verification, not a live Gate call.</p><h3>Errors and limits</h3><p class="small">Malformed addresses, unknown epochs and invalid scenarios return HTTP 400. Requests over the configured body limit are rejected. Per-IP rate limiting returns HTTP 429 and <code>Retry-After: 60</code>. No cross-origin access header is sent.</p></section></div>
+ <div class="notice section-gap"><strong>Case API:</strong> intentionally absent from the public service. Cases and notes live in this browser's local storage. This avoids unauthenticated server writes and false persistence claims on Render Free's ephemeral filesystem. Export a case bundle before clearing browser data.</div>
+ <div class="card section-gap"><h2>Integration boundaries</h2><div class="grid three"><div><h3>Local verifier</h3><p class="small">Generates and independently checks witnesses for bundled synthetic fixtures.</p></div><div><h3>Read-only Sepolia</h3><p class="small">Registry status queries are RPC reads. Saved Gate cases are recorded read-only <code>eth_call</code> evidence.</p></div><div><h3>CRE audit</h3><p class="small">Metadata is parsed from the saved official CLI log. It does not trigger a new CRE run.</p></div></div></div>`;
+}
+
+function bind(page,id){
+ if(page==='screening'){
+  document.querySelector('#screen-form').onsubmit=e=>{e.preventDefault();runScreen('clean');};
+  document.querySelector('#screen-epoch').onchange=e=>{state.screeningInput=document.querySelector('#screen-address').value;state.screeningEpoch=Number(e.target.value);state.screening=null;state.screeningError=null;render();};
+  document.querySelectorAll('[data-scenario]').forEach(button=>button.onclick=()=>{const mode=button.dataset.scenario;document.querySelector('#screen-address').value=mode==='listed'?a(5):a(6);document.querySelector('#screen-epoch').value='1';runScreen(mode);});
+  const receipt=document.querySelector('#download-receipt');if(receipt)receipt.onclick=()=>download('listproof-epoch-'+state.screening.epoch+'-receipt.json',JSON.stringify(state.screening.receipt,null,2));
+  const inspect=document.querySelector('#inspect-proof');if(inspect)inspect.onclick=()=>{state.explorerReceipt=state.screening.receipt;state.explorerResult=null;location.hash='#proof';};
+  const save=document.querySelector('#save-case');if(save)save.onclick=()=>{if(!store||!state.screening||state.screening.error)return;try{const s=state.screening,item=store.create({address:s.address,datasetId:s.datasetId,epoch:s.epoch,root:s.root,result:s.result,receipt:s.receipt,verification:s.verification});toast('Case saved in this browser.');location.hash='#cases/'+item.id;}catch(error){toast('Could not save case: '+error.message);}};
+ }
+ if(page==='cases'&&!id){
+  document.querySelector('#case-filter').onsubmit=e=>{e.preventDefault();state.caseSearch=document.querySelector('#case-search').value.trim();state.caseStatus=document.querySelector('#case-status').value;state.caseSort=document.querySelector('#case-sort').value;render();};
+  document.querySelector('#case-status').onchange=()=>document.querySelector('#case-filter').requestSubmit();
+  document.querySelector('#case-sort').onchange=()=>document.querySelector('#case-filter').requestSubmit();
+ }
+ if(page==='cases'&&id){
+  const item=store?.get(id);if(!item)return;
+  document.querySelector('#case-save-status').onclick=()=>{try{store.status(id,document.querySelector('#case-change-status').value);toast('Case status saved.');render();}catch(error){toast(error.message);}};
+  document.querySelector('#note-form').onsubmit=e=>{e.preventDefault();try{store.note(id,document.querySelector('#case-note').value);toast('Analyst note saved in this browser.');render();}catch(error){toast(error.message);}};
+  const receipt=document.querySelector('#case-receipt');if(receipt)receipt.onclick=()=>download(id+'-receipt.json',JSON.stringify(item.receipt,null,2));
+  const check=document.querySelector('#case-reverify');if(check)check.onclick=()=>reverifyCase(item);
+  const inspect=document.querySelector('#case-inspect');if(inspect)inspect.onclick=()=>{state.explorerReceipt=item.receipt;state.explorerResult=null;location.hash='#proof';};
+  document.querySelector('#case-report').onclick=()=>download(id+'-report.md',reportForCase(item),'text/markdown');
+  document.querySelector('#case-bundle').onclick=()=>download(id+'-evidence-bundle.json',JSON.stringify({schema:'listproof-case-bundle-v1',exportedAt:new Date().toISOString(),storageMode:'browser-local',case:item,sepoliaEvidence:state.evidence,creEvidence:state.cre,limitations:'Browser-local history is not tamper-proof; synthetic set absence is not legal clearance.'},null,2));
+ }
+ if(page==='proof'){
+  document.querySelector('#verify-receipt').onclick=()=>verifyExplorer(document.querySelector('#receipt-text').value);
+  document.querySelector('#receipt-file').onchange=async e=>{const file=e.target.files[0];if(!file)return;if(file.size>262144){state.explorerError='Receipt exceeds 256 KB';render();return;}verifyExplorer(await file.text());};
+  document.querySelector('#clear-receipt').onclick=()=>{state.explorerReceipt=null;state.explorerResult=null;state.explorerError=null;render();};
+  const button=document.querySelector('#download-verification');if(button)button.onclick=()=>download('listproof-verification-result.json',JSON.stringify(state.explorerResult,null,2));
+ }
+ if(page==='datasets')document.querySelectorAll('[data-dataset]').forEach(button=>button.onclick=()=>{state.selectedEpoch=Number(button.dataset.dataset);render();});
+ if(page==='registry'){document.querySelector('#refresh-registry').onclick=()=>refreshRegistry(true);if(!state.registry&&!state.registryLoading)refreshRegistry();}
+}
+
+window.addEventListener('hashchange',()=>{render();view.focus({preventScroll:true});window.scrollTo(0,0);});
+document.querySelector('#menu').onclick=()=>{const sidebar=document.querySelector('#sidebar');sidebar.classList.toggle('open');document.querySelector('#menu').setAttribute('aria-expanded',String(sidebar.classList.contains('open')));};
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){document.querySelector('#sidebar').classList.remove('open');document.querySelector('#menu').setAttribute('aria-expanded','false');}});
+async function boot(){
+ try{
+  const [datasets,evidence,creResult]=await Promise.all([api('/api/v1/datasets'),api('/api/sepolia'),api('/api/v1/cre/evidence').catch(()=>null)]);
+  state.datasets=datasets;state.evidence=evidence;state.cre=creResult;render();
+ }catch(error){view.innerHTML=head('Application error','Unable to load evidence','The public demo could not load its trusted synthetic dataset or Sepolia summary.')+`<div class="notice bad" role="alert">${esc(error.message)}</div>`;}
+}
+boot();

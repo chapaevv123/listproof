@@ -1,16 +1,22 @@
-# ListProof
+# ListProof — Verifiable Compliance Evidence Infrastructure
 
-> **Cryptographic evidence that an EVM address is absent from one committed, versioned set.**
+> **Prove the evidence. Not just the screening result.** Cryptographic evidence that an EVM address is absent from one committed, versioned set.
 
 ListProof is a synthetic address-screening demonstration for BLI Legal Tech Hackathon 2, targeting Chainlink's **Best workflow with CRE** bounty. The claim is limited to a particular dataset and epoch. It does **not** establish sanctions compliance, legal clearance, identity, or source completeness.
 
 **Explore:** [Registry](https://sepolia.etherscan.io/address/0x1607Af4E1DA1C06362871443d2e95C367B984Efa) · [Gate](https://sepolia.etherscan.io/address/0xf88F9870fe6e135d5bD56852750c8af8a466A9A3) · [epoch-1 transaction](https://sepolia.etherscan.io/tx/0x824c1f5a44aff746f8737b9e97d6e92d5e42a23a69d4627b6a8fe7de8e7d478d) · [evidence](docs/EVIDENCE.md) · [submission draft](docs/SUBMISSION.md).
 
-**Demo:** run `npm.cmd run serve` and open `http://127.0.0.1:4173`. A [read-only Docker/Render deployment](docs/PUBLIC-DEMO.md) is prepared, but no hosted demo URL has been verified. A judge needs no wallet to use the proof demo.
+**Public service:** [listproof-e5sp.onrender.com](https://listproof-e5sp.onrender.com/) · [Deployment and release status](docs/PUBLIC-DEMO.md). The V3 interface is available from the local source immediately; confirm the public service reports `productVersion: "v3"` at `/api/health` before treating the hosted service as the V3 release. A judge needs no wallet or gas.
 
-![Genuine local ListProof demo showing the synthetic dataset and saved Sepolia evidence](docs/assets/demo-desktop.png)
+![Genuine local V3 ListProof operations workspace](docs/assets/v3-overview-local.png)
 
-_Captured from the running local application on 2026-10-30, before clicking a proof scenario. The proof scenarios are reproducible using the commands below._
+_Captured from the running local V3 application on 2026-10-30. The zero values are genuine empty browser workspace counts._
+
+## Product workflow
+
+Open **Address screening**, enter a 20-byte EVM address, select a synthetic epoch and choose **Generate & verify proof**. The result identifies the exact commitment and independent local verification. **Save as case** stores the original receipt in this browser profile. In **Cases & audit trail**, add notes, update review status, reverify the saved witness, and download a human-readable report or JSON evidence bundle. **Proof explorer** accepts a downloaded receipt or case bundle and checks its witness against a trusted fixture without trusting the receipt's own verdict. **Datasets**, **On-chain registry** and **Chainlink CRE** separate local fixtures, a fresh read-only Sepolia Registry query, the mined publication transaction, saved Gate calls and official CRE CLI simulation.
+
+Cases and notes use **browser-local storage** because the free Render filesystem is ephemeral and no authenticated persistent database is configured. They survive navigation and normal reloads in that browser, but are not synchronized, protected from local editing or guaranteed to survive clearing site data. Export the evidence bundle to retain a portable copy. The public API exposes no case-write or privileged publication route. See [product and API guide](docs/PRODUCT.md).
 
 ## Problem and solution
 
@@ -67,7 +73,7 @@ sequenceDiagram
   W-->>C: Prepared signed audit report; no transaction
 ```
 
-The [audit config](cre/listproof/config.onchain.json) targets the deployed Registry. [Official CLI output](evidence/cre-onchain-settings.txt) records a matching epoch-1 read of root, content hash and count, followed by `signed audit report prepared; read-only registry check; no transaction sent`. The [stale on-chain case](evidence/cre-onchain-stale-settings.txt) rejects an epoch mismatch. Other saved negative logs reject bad content hash, bad root, stale config, invalid schema and unavailable dataset. These are **official local CRE simulations**, with real reads where configured. The [older local simulation](evidence/cre-local-simulation.txt) had no Registry configured. A receiver exists in source but has not been deployed.
+The [audit config](cre/listproof/config.onchain.json) targets the deployed Registry and pins the expected count and synthetic provenance. [Original official CLI output](evidence/cre-onchain-settings.txt) and the [V3 audit rerun](evidence/cre-v3-onchain-settings.txt) record a matching epoch-1 read of root, content hash and count, followed by `signed audit report prepared; read-only registry check; no transaction sent`. The [stale on-chain case](evidence/cre-onchain-stale-settings.txt) rejects an epoch mismatch. Other saved negative logs reject bad content hash, bad root, stale config, invalid schema and unavailable dataset. These are **official local CRE simulations**, with real reads where configured. The [older local simulation](evidence/cre-local-simulation.txt) had no Registry configured. A receiver exists in source but has not been deployed.
 
 A live `publish-next` path needs approved DON access, a public byte-identical dataset URL, verified forwarder and workflow ID, a deployed receiver and an owner-approved publisher transfer. See the [CRE runbook](docs/CRE-RUNBOOK.md) and [Chainlink's simulation/deployment distinction](https://docs.chain.link/cre/overview).
 
@@ -78,7 +84,7 @@ A live `publish-next` path needs approved DON access, a public byte-identical da
 | **ONCHAIN_TRANSACTION** | Registry and Gate deployed; epoch 1 published in block 12026768 | [publication transaction](https://sepolia.etherscan.io/tx/0x824c1f5a44aff746f8737b9e97d6e92d5e42a23a69d4627b6a8fe7de8e7d478d), [curated summary](data/sepolia-public.json) |
 | **ONCHAIN_READ** | Six Gate `eth_call` scenarios passed at saved block 12026859: valid middle and boundaries; listed, tampered and stale rejected | [curated summary](data/sepolia-public.json); original calldata/RPC report retained locally outside Git |
 | **OFFICIAL_CRE_SIMULATION** | Dataset and real Registry read matched epoch 1; audit report prepared | [audit log](evidence/cre-onchain-settings.txt) |
-| **LOCAL_TEST** | 16 Node and seven Foundry tests passed on 2026-10-30 | Commands below |
+| **LOCAL_TEST** | Node and Foundry counts are reported by the latest local run; browser workflow has its own smoke script | Commands below |
 
 Dataset ID: `0xa911b05f7ffdc54a7c72dfc23ca6f7ccaa8e15eec7af7c2ef1215254db6ff9ed` · Content hash: `0x847808cb140145db952ee309dc5229106e1923a0499ecd91e07dbe175fb42b57` · Count: 3. Full deployment/RPC receipts are ignored locally; the committed public summary is curated. A fresh six-case RPC read is available via `npm.cmd run onchain:proofs`; it refuses to overwrite an existing original report.
 
@@ -144,6 +150,6 @@ The CRE runner needs an authenticated official CLI and writes eight logs. See [C
 | `scripts/`, `web/` | Proof API, evidence export and UI; separate localhost MetaMask deployment interface |
 | `data/`, `evidence/`, `docs/` | Synthetic fixtures, curated public facts, CLI logs and runbooks |
 
-The [Dockerfile](Dockerfile) packages only the public demo server and selected evidence. A genuine local screenshot is above; there is **no verified hosted demo or video yet**. See [hosting](docs/PUBLIC-DEMO.md), [recording script](docs/DEMO.md) and [submission text](docs/SUBMISSION.md).
+The [Dockerfile](Dockerfile) packages the public application server and selected evidence. The public Render URL exists; V3 release status must be checked with the [public smoke command](docs/PUBLIC-DEMO.md). The screenshot above is a genuine **local V3** capture. No video is claimed. See [hosting](docs/PUBLIC-DEMO.md), [recording script](docs/DEMO.md) and [submission text](docs/SUBMISSION.md).
 
 The [organizer's October 11 article](https://bli.tools/international-hackathon-with-ryo-digital-chainlink-labs-focuses-on-ai-payrails-stablecoins-more/) states **October 31, 2026** as the submission date and asks for public code, architecture documentation and a video demo. The [organizer page](https://bli.foundation/hackathon/) lists judging November 5–December 5 and awards December 12. The exact cutoff time and bounty-specific criteria were not verified from DoraHacks; confirm them in the live form. Licensed under [MIT](LICENSE).

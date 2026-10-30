@@ -1,3 +1,45 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ListProof — Committed address screening proof</title><style>
-:root{font-family:Inter,ui-sans-serif,system-ui,sans-serif;color:#e9f1ee;background:#07110f}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 80% 0,#1d473c 0,transparent 33%),#07110f}main{max-width:1100px;margin:auto;padding:28px 24px 70px}.top{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #315249;padding-bottom:18px}.brand{font-size:22px;font-weight:800;letter-spacing:-.05em}.brand span{color:#8ff0ba}.tag{border:1px solid #466b5b;border-radius:99px;padding:8px 13px;color:#a9c9b9;font-size:12px}.hero{padding:76px 0 42px;max-width:850px}.eyebrow{color:#8ff0ba;font-size:12px;letter-spacing:.2em;font-weight:700;text-transform:uppercase}h1{font-size:clamp(42px,6vw,72px);letter-spacing:-.075em;line-height:1.03;margin:17px 0}p{color:#aac0b5;line-height:1.6}.hero p{font-size:18px;max-width:680px}.grid{display:grid;grid-template-columns:1.25fr .75fr;gap:20px}.card{background:#10221d;border:1px solid #315247;border-radius:18px;padding:27px;box-shadow:0 15px 50px #0003}.label{color:#9ab6a7;text-transform:uppercase;letter-spacing:.12em;font-size:11px;font-weight:750}.root{font:12px ui-monospace,Consolas,monospace;word-break:break-all;color:#9af0bd;background:#091813;padding:14px;border-radius:9px;margin-top:8px}.field{width:100%;background:#071611;border:1px solid #4a6d5c;color:white;border-radius:10px;padding:15px;font:14px ui-monospace,Consolas,monospace;outline:none;margin:8px 0 15px}.field:focus{border-color:#88eeb0}button{background:#96eebb;border:0;border-radius:10px;padding:14px 18px;font-weight:750;color:#082019;cursor:pointer}button:hover{background:#b4ffd2}button:disabled{opacity:.45;cursor:not-allowed}.scenarios{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 20px}.scenarios button{background:#1c392d;color:#d9f5e3;padding:9px 11px;font-size:12px}.scenarios button:hover{background:#326547}.result{margin-top:20px;min-height:95px;background:#091813;border:1px solid #315247;border-radius:12px;padding:17px;font:13px ui-monospace,Consolas,monospace;white-space:pre-wrap;word-break:break-all}.stat{font-size:26px;font-weight:750;margin:8px 0 16px}.small{font-size:13px}.footer{margin-top:25px;padding:20px 0;border-top:1px solid #315249;color:#94aa9e;font-size:12px}select{background:#071611;border:1px solid #4a6d5c;color:white;padding:9px;border-radius:8px;margin:12px 0}@media(max-width:750px){.grid{grid-template-columns:1fr}.hero{padding-top:52px}.tag{display:none}}
-</style></head><body><main><header class="top"><div class="brand">List<span>Proof</span></div><div class="tag">LOCAL DEMO · SYNTHETIC DATA · NO CHAIN TRANSACTION</div></header><section class="hero"><div class="eyebrow">Verifiable dataset commitments</div><h1>Prove an address is absent from a committed list.</h1><p>Merkle neighbor proofs demonstrate absence within one exact dataset version. Every result is tied to a chain, dataset, epoch and root.</p></section><div class="grid"><section class="card"><div class="label">01 / Address check</div><p class="small">Enter an EVM address or run a preset scenario.</p><input id="address" class="field" value="0x0000000000000000000000000000000000000006" aria-label="EVM address"><div class="scenarios"><button data-mode="clean">Clean address</button><button data-mode="listed">Listed address</button><button data-mode="stale">Stale proof</button><button data-mode="tampered">Tampered proof</button></div><label class="label" for="epoch">Dataset epoch</label><br><select id="epoch"><option value="1">Epoch 1</option><option value="2">Epoch 2</option></select><br><button id="verify">Generate & independently verify</button><div id="result" class="result">Awaiting input.</div></section><aside class="card"><div class="label">02 / Commitment</div><div id="epochValue" class="stat">Epoch 1</div><div class="label">Local fixture root · SHA-256</div><div id="root" class="root">Loading…</div><p class="small">Dataset: listproof-synthetic-demo<br>Chain ID: 11155111 (Sepolia identifier)<br>Normalization: lowercase 20-byte EVM address</p><div class="label">Verification surfaces</div><p class="small">✓ Independent local verifier<br>✓ Sepolia Registry epoch 1 published; proof buttons are local<br>✓ <a href="/evidence/cre-onchain-settings.txt" style="color:#9af0bd">Official CRE audit simulation with Sepolia Registry read</a><br>○ CRE on-chain write: no verified receipt</p></aside></div><section class="card" style="margin-top:20px"><div class="label">03 / Committed synthetic dataset</div><h2>Addresses in this epoch</h2><p class="small">These fixtures have no real-world screening meaning. The list below is the exact set used for local proofs.</p><div id="datasetAddresses" class="result">Loading dataset...</div></section><section class="card" style="margin-top:20px"><div class="label">04 / Sepolia evidence</div><h2 style="margin:12px 0">Root published on Sepolia</h2><p class="small">Contract addresses and transaction links below come from verified local receipt evidence. Proof buttons above run local JavaScript verification. Six read-only Gate calls are shown separately from local proof buttons.</p><div id="sepoliaEvidence" class="result">Loading evidence...</div></section><div class="footer">Synthetic addresses only. Absence in this committed list does not establish sanctions compliance, legal approval, identity, or KYC status. This page sends no blockchain transactions; Sepolia links show independently recorded publication evidence.</div></main><script src="/app.js"></script></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#f7f9fe">
+  <meta name="description" content="ListProof: independently verifiable evidence for a specific committed address dataset version.">
+  <title>ListProof — Verifiable Compliance Evidence</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="#overview" aria-label="ListProof overview">
+        <svg class="brand-mark" viewBox="0 0 40 40" aria-hidden="true"><rect x="4" y="4" width="32" height="32" rx="10" fill="#375BD2"/><path d="M12 22l5 5 11-13" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="29" cy="29" r="3" fill="#A7C5FF"/></svg>
+        <span>List<span class="brand-accent">Proof</span><small>Evidence workspace</small></span>
+      </a>
+      <div class="sidebar-label">WORKSPACE</div>
+      <nav aria-label="Primary navigation" id="nav">
+        <a href="#overview" data-route="overview"><span class="nav-icon">▦</span>Overview</a>
+        <a href="#screening" data-route="screening"><span class="nav-icon">⌕</span>Address screening</a>
+        <a href="#cases" data-route="cases"><span class="nav-icon">▤</span>Cases &amp; audit trail</a>
+        <a href="#proof" data-route="proof"><span class="nav-icon">◇</span>Proof explorer</a>
+        <div class="sidebar-label nested">EVIDENCE</div>
+        <a href="#datasets" data-route="datasets"><span class="nav-icon">▥</span>Datasets</a>
+        <a href="#registry" data-route="registry"><span class="nav-icon">⬡</span>On-chain registry</a>
+        <a href="#cre" data-route="cre"><span class="nav-icon">✳</span>Chainlink CRE</a>
+        <a href="#api" data-route="api"><span class="nav-icon">⌘</span>Developer API</a>
+      </nav>
+      <div class="sidebar-foot"><span class="status-dot"></span><span>Synthetic dataset<br><strong>Demo mode · Sepolia</strong></span></div>
+    </aside>
+    <div class="workspace">
+      <header class="topbar">
+        <button class="mobile-menu icon-button" id="menu" aria-label="Open menu" aria-expanded="false">☰</button>
+        <div class="breadcrumb">ListProof <span>/</span> <strong id="breadcrumb">Overview</strong></div>
+        <div class="topbar-right"><span class="mode-pill">PERSONAL BROWSER WORKSPACE</span><a class="top-action" href="#screening">New screening <span aria-hidden="true">↗</span></a></div>
+      </header>
+      <main id="view" tabindex="-1"><div class="loading-view">Loading workspace…</div></main>
+      <footer class="footer"><span>ListProof · Verifiable Compliance Evidence Infrastructure</span><span>Synthetic data only. No legal clearance or sanctions decision.</span></footer>
+    </div>
+  </div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
