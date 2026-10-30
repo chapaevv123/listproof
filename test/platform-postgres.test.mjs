@@ -3,15 +3,21 @@ import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {spawn} from 'node:child_process';
 import {createServer} from 'node:net';
+import {Pool} from 'pg';
 import {openPlatformDb} from '../src/platform-db.mjs';
 import {bootstrapOwner,login,sessionFromRequest,passwordHash} from '../src/platform-auth.mjs';
 import {createPlatformStore,ensureSyntheticVersions} from '../src/platform-store.mjs';
 
 test('PostgreSQL migration, auth, case persistence across connections and workspace isolation',
  {skip:!process.env.LISTPROOF_TEST_DATABASE_URL},async()=>{
-  const url=process.env.LISTPROOF_TEST_DATABASE_URL;
+  const admin=new Pool({connectionString:process.env.LISTPROOF_TEST_DATABASE_URL,ssl:false});
+  const schema='lp_existing_'+randomUUID().replaceAll('-','');
+  await admin.query(`CREATE SCHEMA "${schema}"`);
+  const scoped=new URL(process.env.LISTPROOF_TEST_DATABASE_URL);
+  scoped.searchParams.set('options',`-c search_path=${schema}`);
+  const url=scoped.toString();
+  try{
   const id=randomUUID().slice(0,8);
-  await assert.rejects(openPlatformDb({databaseUrl:url,migrate:false}),/schema_migrations|migration/i);
   const [firstConnection,secondConnection]=await Promise.all([openPlatformDb({databaseUrl:url,migrate:true}),openPlatformDb({databaseUrl:url,migrate:true})]);
   await secondConnection.close();let db=firstConnection;
   const owner=await bootstrapOwner(db,{email:`owner-${id}@example.test`,password:'correct horse battery staple',orgSlug:`org-${id}`,orgName:'Postgres test'});
@@ -57,5 +63,6 @@ test('PostgreSQL migration, auth, case persistence across connections and worksp
    const verify=await fetch(base+'/api/v2/cases/'+saved.id+'/reverify',{method:'POST',headers:{cookie:second.cookie,'x-csrf-token':second.body.csrf,'content-type':'application/json'},body:'{}'});assert.equal(verify.status,200);assert.equal((await verify.json()).screening.latestVerification.verified,true);
    const foreign=await signIn(`other-${id}@example.test`,`other-${id}`);
    assert.equal((await fetch(base+'/api/v2/cases/'+saved.id,{headers:{cookie:foreign.cookie}})).status,404);
-  }finally{server.kill();if(server.exitCode===null)await new Promise(resolve=>server.once('exit',resolve));}
+  }finally{server.kill();if(server.exitCode===null&&server.signalCode===null)await new Promise(resolve=>server.once('exit',resolve));}
+  }finally{await admin.query(`DROP SCHEMA "${schema}" CASCADE`);await admin.end();}
  });

@@ -1,6 +1,6 @@
 import {openPlatformDb} from './platform-db.mjs';
 import {ensureSyntheticVersions,createPlatformStore} from './platform-store.mjs';
-import {login,logout,sessionFromRequest,validCsrf,cookieFor} from './platform-auth.mjs';
+import {bootstrapOwner,login,logout,sessionFromRequest,validCsrf,cookieFor} from './platform-auth.mjs';
 
 const error=(message,status=400)=>{throw Object.assign(Error(message),{status});};
 async function jsonBody(req,max=1048576){
@@ -20,7 +20,14 @@ const openapi={openapi:'3.1.0',info:{title:'ListProof V4 API',version:'0.1.0',de
  '/api/v2/datasets/{id}/approve':{post:{summary:'Approve imported version for local screening; owner only',responses:{200:{description:'Approved version'}}}}
 }};
 export async function createPlatform(){
- const db=await openPlatformDb();await ensureSyntheticVersions(db);
+ const db=await openPlatformDb();
+ try{
+  await ensureSyntheticVersions(db);
+  const email=process.env.LISTPROOF_OWNER_EMAIL,password=process.env.LISTPROOF_OWNER_PASSWORD;
+  if(Boolean(email)!==Boolean(password))throw Error('Both LISTPROOF_OWNER_EMAIL and LISTPROOF_OWNER_PASSWORD are required for owner bootstrap');
+  if(email)await bootstrapOwner(db,{email,password,orgSlug:process.env.LISTPROOF_ORG_SLUG||'listproof',orgName:process.env.LISTPROOF_ORG_NAME||'ListProof Workspace'});
+  if(!(await db.query('SELECT id FROM users LIMIT 1')).length)throw Error('Owner bootstrap is required before the private workspace can start');
+ }catch(error){await db.close();throw error;}
  const store=createPlatformStore(db);
  const sendError=(send,res,e)=>send(res,e.status&&Number.isInteger(e.status)?e.status:500,{error:e.status?e.message:'Internal server error',code:e.status?'PLATFORM_REQUEST':'PLATFORM_INTERNAL'});
  async function handle(req,res,send,url){

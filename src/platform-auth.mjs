@@ -23,13 +23,18 @@ export async function passwordMatches(password,encoded){
 export async function bootstrapOwner(db,{email,password,orgSlug,orgName}){
  if(!emailPattern.test(email)||!slugPattern.test(orgSlug)||typeof orgName!=='string'||!orgName.trim()||orgName.length>100)throw Error('Invalid owner or workspace');
  const hash=await passwordHash(password),now=new Date().toISOString(),userId=randomUUID(),orgId=randomUUID();
- await db.transaction(async tx=>{
-  if((await tx.query('SELECT id FROM users LIMIT 1')).length)throw Error('Owner already exists');
+ return db.transaction(async tx=>{
+  if(tx.kind==='postgres')await tx.query('SELECT pg_advisory_xact_lock(1279877435)');
+  if((await tx.query('SELECT id FROM users LIMIT 1')).length){
+   const rows=await tx.query("SELECT u.id user_id,o.id org_id FROM users u JOIN memberships m ON m.user_id=u.id JOIN organizations o ON o.id=m.org_id WHERE u.email=? AND o.slug=? AND m.role='owner'",[email.toLowerCase(),orgSlug]);
+   if(rows.length!==1)throw Error('Owner already exists');
+   return {userId:rows[0].user_id,orgId:rows[0].org_id,email:email.toLowerCase(),orgSlug};
+  }
   await tx.query('INSERT INTO users(id,email,password_hash,created_at) VALUES(?,?,?,?)',[userId,email.toLowerCase(),hash,now]);
   await tx.query('INSERT INTO organizations(id,slug,name,created_at) VALUES(?,?,?,?)',[orgId,orgSlug,orgName.trim(),now]);
   await tx.query('INSERT INTO memberships(org_id,user_id,role,created_at) VALUES(?,?,?,?)',[orgId,userId,'owner',now]);
+  return {userId,orgId,email:email.toLowerCase(),orgSlug};
  });
- return {userId,orgId,email:email.toLowerCase(),orgSlug};
 }
 export async function addUser(db,{actor,orgId,email,password,role}){
  if(actor.role!=='owner'||actor.orgId!==orgId)throw Error('Forbidden');

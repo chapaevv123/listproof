@@ -21,3 +21,7 @@ services:
         value: verify
       - key: DATABASE_URL
         sync: false
+      - key: LISTPROOF_OWNER_EMAIL
+        sync: false
+      - key: LISTPROOF_OWNER_PASSWORD
+        sync: false

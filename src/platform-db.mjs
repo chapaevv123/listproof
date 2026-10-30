@@ -23,7 +23,7 @@ const convert=(sql)=>{let i=0;return sql.replace(/\?/g,()=>'$'+(++i));};
 export async function openPlatformDb(options={}){
  const databaseUrl=options.databaseUrl??process.env.DATABASE_URL;
  const sqlitePath=options.sqlitePath??process.env.LISTPROOF_DB_PATH;
- const migrate=options.migrate??process.env.NODE_ENV!=='production';
+ const migrate=options.migrate??true;
  if(!databaseUrl&&!sqlitePath)throw Error('A durable database path or DATABASE_URL is required');
  if(process.env.NODE_ENV==='production'&&!databaseUrl)throw Error('Production private workspace requires DATABASE_URL; local SQLite paths are not durable on ephemeral hosting');
  let db;
@@ -31,7 +31,9 @@ export async function openPlatformDb(options={}){
   const {Pool}=await import('pg');
   const sslMode=process.env.LISTPROOF_DB_SSL||'verify';
   if(!['verify','disable'].includes(sslMode))throw Error('LISTPROOF_DB_SSL must be verify or disable');
-  const pool=new Pool({connectionString:databaseUrl,max:5,connectionTimeoutMillis:5000,ssl:sslMode==='disable'?false:{rejectUnauthorized:true}});
+  const connectionUrl=new URL(databaseUrl);
+  connectionUrl.searchParams.set('sslmode',sslMode==='verify'?'verify-full':'disable');
+  const pool=new Pool({connectionString:connectionUrl.toString(),max:5,connectionTimeoutMillis:5000});
   pool.on('error',error=>console.error('ListProof PostgreSQL idle connection lost: '+(error.code||'unknown')));
   const query=(client,sql,params=[])=>client.query(convert(sql),params).then(x=>x.rows);
   db={kind:'postgres',query:(sql,params)=>query(pool,sql,params),transaction:async fn=>{const client=await pool.connect();try{await client.query('BEGIN');const result=await fn({kind:'postgres',query:(sql,params)=>query(client,sql,params)});await client.query('COMMIT');return result;}catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}},close:()=>pool.end()};
@@ -49,6 +51,10 @@ export async function openPlatformDb(options={}){
    const applied=await tx.query('SELECT version FROM schema_migrations WHERE version=?',[1]);
    if(!applied.length){for(const sql of ddl)await tx.query(sql);await tx.query('INSERT INTO schema_migrations(version,applied_at) VALUES(?,?)',[1,new Date().toISOString()]);}
   });
+  else{
+   const metadata=await db.query(db.kind==='postgres'?"SELECT to_regclass('schema_migrations') AS name":"SELECT name FROM sqlite_master WHERE type='table' AND name='schema_migrations'");
+   if(!metadata[0]?.name)throw Error('Platform database has no migration metadata; run migrate:platform');
+  }
   const versions=await db.query('SELECT version FROM schema_migrations ORDER BY version');
   if(versions.length!==1||versions[0].version!==1)throw Error('Unsupported or missing platform database migration; run migrate:platform');
  }catch(error){await db.close();throw error;}
